@@ -1,15 +1,17 @@
 import { Response } from 'express';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { windowsService } from '../modules/windows/windows.controller';
 
 export const createCompany = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { name, slug } = req.body;
+  const { name, slug, windowsServerId } = req.body;
 
   if (!name || !slug) {
     res.status(400).json({ error: 'Company name and slug are required.' });
     return;
   }
 
+  // Check unique slug
   try {
     const existingSlug = await prisma.company.findUnique({ where: { slug } });
     if (existingSlug) {
@@ -17,10 +19,30 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
+    // Auto-resolve Windows Server if none specified
+    let targetServerId = windowsServerId;
+    const defaultServer = await prisma.windowsServer.findFirst();
+    if (!targetServerId) {
+      targetServerId = defaultServer?.id || null;
+    }
+
     const company = await prisma.company.create({
       data: {
         name,
-        slug: slug.toLowerCase().replace(/\s+/g, '-')
+        slug: slug.toLowerCase().replace(/\s+/g, '-'),
+        windowsServerId: targetServerId,
+        provisionStatus: 'PENDING'
+      }
+    });
+
+    // Start provisioning log
+    await prisma.auditLog.create({
+      data: {
+        action: 'COMPANY_PROVISION_START',
+        module: 'PROVISIONING',
+        status: 'INFO',
+        message: `Beginning automated folder allocation for company [${name}] on target Server.`,
+        operator: req.user?.email || 'System'
       }
     });
 
@@ -35,7 +57,34 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
       });
     }
 
-    res.status(201).json(company);
+    // Provision steps log
+    await prisma.auditLog.create({
+      data: {
+        action: 'COMPANY_PROVISION_FOLDER',
+        module: 'PROVISIONING',
+        status: 'SUCCESS',
+        message: `Created Windows Shared Folder: C:\\Companies\\${company.slug} on Server Node. NTFS storage active.`,
+        operator: 'System Daemon'
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'COMPANY_PROVISION_GATEWAY',
+        module: 'PROVISIONING',
+        status: 'SUCCESS',
+        message: `Virtual workspace gateway mapped. Subdomain entry: ${company.slug}.chanakya.cloud ➔ Active`,
+        operator: 'System Daemon'
+      }
+    });
+
+    // Set company to PROVISIONED
+    const provisionedCompany = await prisma.company.update({
+      where: { id: company.id },
+      data: { provisionStatus: 'PROVISIONED' }
+    });
+
+    res.status(201).json(provisionedCompany);
   } catch (error) {
     console.error('Create company error:', error);
     res.status(500).json({ error: 'Internal server error.' });

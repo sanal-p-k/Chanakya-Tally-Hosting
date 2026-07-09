@@ -8,9 +8,9 @@ import {
   Calculator, Briefcase, Globe, FileSpreadsheet, AppWindow, 
   Shield, Users, Layers, LayoutDashboard, Settings, LogOut, 
   Play, User, Plus, Trash2, Edit2, ShieldAlert, Check, X, 
-  RefreshCw, Activity, Database, Clock, ChevronRight, Moon, Sun, Monitor, Loader2
+  RefreshCw, Activity, Database, Clock, ChevronRight, Moon, Sun, Monitor, Loader2,
+  Server, Terminal, Wifi, Key, Cpu, HardDrive
 } from 'lucide-react';
-
 
 // Mapping helper for App Icons
 const getAppIcon = (iconName: string) => {
@@ -28,6 +28,7 @@ export default function Dashboard() {
   
   // Views
   const [activeView, setActiveView] = useState<'home' | 'workspace' | 'admin' | 'settings'>('home');
+  const [activeAdminTab, setActiveAdminTab] = useState<'companies' | 'users' | 'apps' | 'servers' | 'logs'>('companies');
   const [activeApp, setActiveApp] = useState<any>(null);
   
   // Auth state
@@ -40,14 +41,24 @@ export default function Dashboard() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [usersList, setUsersList] = useState<any[]>([]);
   const [globalApps, setGlobalApps] = useState<any[]>([]);
+  const [serversList, setServersList] = useState<any[]>([]);
+  const [auditLogsList, setAuditLogsList] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState<boolean>(true);
 
-  // Modal/Overlay state
-  const [modalType, setModalType] = useState<string | null>(null);
+  // Settings configs
+  const [settings, setSettings] = useState({
+    webglAccelerated: true,
+    clipboardSync: true,
+    audioRedirection: true,
+    printerRedirection: false
+  });
+
+  // Modal control states
+  const [modalType, setModalType] = useState<'create-company' | 'create-user' | 'create-app' | 'assign-apps' | 'reset-password' | null>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
 
   // Forms inputs
-  const [companyForm, setCompanyForm] = useState({ name: '', slug: '' });
+  const [companyForm, setCompanyForm] = useState({ name: '', slug: '', windowsServerId: '' });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'USER', companyId: '', allowedApplications: [] as string[] });
   const [appForm, setAppForm] = useState({ name: '', icon: 'AppWindow', description: '', executable: '', guacamoleConnectionId: '', guacamoleConfig: '{}', status: 'ACTIVE' });
   const [passwordResetForm, setPasswordResetForm] = useState({ newPassword: '' });
@@ -68,28 +79,36 @@ export default function Dashboard() {
     setUser(parsedUser);
     setToken(savedToken);
 
-
-
     // Fetch workspace information
     fetchDashboardData(savedToken, parsedUser);
   }, [router]);
 
-  const fetchDashboardData = async (authToken: string, currentUser: any) => {
+  async function fetchDashboardData(authToken: string, currentUser: any) {
     setLoadingData(true);
     try {
       const headers = { 'Authorization': `Bearer ${authToken}` };
 
-      // 1. Fetch allowed applications
+      // Get allowed apps
       const appsRes = await fetch('http://localhost:5000/api/apps', { headers });
       const appsData = await appsRes.json();
       if (appsRes.ok) setAllowedApps(appsData);
 
-      // 2. Fetch recent session logs
+      // Get recent sessions
       const sessionsRes = await fetch('http://localhost:5000/api/sessions', { headers });
       const sessionsData = await sessionsRes.json();
       if (sessionsRes.ok) setRecentSessions(sessionsData);
 
-      // 3. Fetch admin-level information if allowed
+      // Get Servers
+      const serversRes = await fetch('http://localhost:5000/api/servers', { headers });
+      const serversData = await serversRes.json();
+      if (serversRes.ok) setServersList(serversData);
+
+      // Get Audit Logs
+      const logsRes = await fetch('http://localhost:5000/api/audit-logs', { headers });
+      const logsData = await logsRes.json();
+      if (logsRes.ok) setAuditLogsList(logsData);
+
+      // Admin specific calls
       if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COMPANY_ADMIN') {
         const usersRes = await fetch('http://localhost:5000/api/users', { headers });
         const usersData = await usersRes.json();
@@ -112,16 +131,6 @@ export default function Dashboard() {
     }
   };
 
-
-
-  // Sign out handler
-  const handleSignOut = () => {
-    localStorage.removeItem('chanakya_token');
-    localStorage.removeItem('chanakya_user');
-    router.push('/login');
-  };
-
-  // Launch App Handler
   const handleLaunchApp = async (app: any) => {
     try {
       const response = await fetch('http://localhost:5000/api/sessions/launch', {
@@ -138,6 +147,12 @@ export default function Dashboard() {
       // Open direct Guacamole connection client URL in a new window/tab
       if (data.launchUrl) {
         window.open(data.launchUrl, '_blank');
+        // Refresh sessions to show the active connection log
+        const sessionsRes = await fetch('http://localhost:5000/api/sessions', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const sessionsData = await sessionsRes.json();
+        if (sessionsRes.ok) setRecentSessions(sessionsData);
       } else {
         throw new Error('Launch URL not returned by server.');
       }
@@ -146,40 +161,6 @@ export default function Dashboard() {
     }
   };
 
-  // Disconnect App Handler
-  const handleDisconnectApp = async () => {
-    if (!activeSessionId) {
-      setActiveApp(null);
-      setActiveView('home');
-      return;
-    }
-
-    try {
-      await fetch('http://localhost:5000/api/sessions/end', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ sessionId: activeSessionId })
-      });
-      
-      // Refresh session history logs
-      const sessionsRes = await fetch('http://localhost:5000/api/sessions', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const sessionsData = await sessionsRes.json();
-      if (sessionsRes.ok) setRecentSessions(sessionsData);
-    } catch (error) {
-      console.error('Error terminating session:', error);
-    } finally {
-      setActiveSessionId(null);
-      setActiveApp(null);
-      setActiveView('home');
-    }
-  };
-
-  // Admin CRUD Forms Submit handlers
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -193,13 +174,9 @@ export default function Dashboard() {
       });
       if (response.ok) {
         setModalType(null);
-        setCompanyForm({ name: '', slug: '' });
-        // Refresh company records
-        const companiesRes = await fetch('http://localhost:5000/api/companies', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const companiesData = await companiesRes.json();
-        if (companiesRes.ok) setCompanies(companiesData);
+        setCompanyForm({ name: '', slug: '', windowsServerId: '' });
+        // Refresh company records, servers, and logs
+        fetchDashboardData(token, user);
       } else {
         const errorData = await response.json();
         alert(errorData.error || 'Failed to create company');
@@ -223,12 +200,8 @@ export default function Dashboard() {
       if (response.ok) {
         setModalType(null);
         setUserForm({ name: '', email: '', password: '', role: 'USER', companyId: '', allowedApplications: [] });
-        // Refresh users record
-        const usersRes = await fetch('http://localhost:5000/api/users', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const usersData = await usersRes.json();
-        if (usersRes.ok) setUsersList(usersData);
+        // Refresh user records, servers, and logs
+        fetchDashboardData(token, user);
       } else {
         const errorData = await response.json();
         alert(errorData.error || 'Failed to create user');
@@ -238,43 +211,47 @@ export default function Dashboard() {
     }
   };
 
-  const handleCreateApplication = async (e: React.FormEvent) => {
+  const handleCreateApp = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let parsedConfig = {};
-      try {
-        parsedConfig = JSON.parse(appForm.guacamoleConfig);
-      } catch (err) {
-        alert('Invalid JSON config format.');
-        return;
-      }
-
       const response = await fetch('http://localhost:5000/api/apps', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...appForm,
-          guacamoleConfig: parsedConfig
-        })
+        body: JSON.stringify(appForm)
       });
       if (response.ok) {
         setModalType(null);
         setAppForm({ name: '', icon: 'AppWindow', description: '', executable: '', guacamoleConnectionId: '', guacamoleConfig: '{}', status: 'ACTIVE' });
-        // Refresh apps list
-        const appsRes = await fetch('http://localhost:5000/api/apps', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const appsData = await appsRes.json();
-        if (appsRes.ok) {
-          setGlobalApps(appsData);
-          setAllowedApps(appsData);
-        }
+        fetchDashboardData(token, user);
       } else {
         const errorData = await response.json();
-        alert(errorData.error || 'Failed to create application');
+        alert(errorData.error || 'Failed to create application profile');
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleAssignApplications = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`http://localhost:5000/api/users/${selectedItem.id}/assign-apps`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ applicationIds: userAppAssignments })
+      });
+      if (response.ok) {
+        setModalType(null);
+        fetchDashboardData(token, user);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || 'Failed to assign application permissions');
       }
     } catch (error) {
       console.error(error);
@@ -290,62 +267,78 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(passwordResetForm)
+        body: JSON.stringify({ newPassword: passwordResetForm.newPassword })
       });
       if (response.ok) {
         setModalType(null);
         setPasswordResetForm({ newPassword: '' });
-        alert('User password has been reset successfully.');
+        alert('User Portal security password reset successfully.');
       } else {
         const errorData = await response.json();
-        alert(errorData.error || 'Failed to reset password');
+        alert(errorData.error || 'Password reset failed');
       }
     } catch (error) {
       console.error(error);
     }
   };
 
-  const handleAssignApplicationsSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRebootServer = async (serverId: string) => {
+    if (!confirm('Are you sure you want to reboot this Windows Server RDP host? This will terminate all active connection logs.')) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${selectedItem.id}/assign-apps`, {
+      const res = await fetch(`http://localhost:5000/api/servers/${serverId}/reboot`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ applicationIds: userAppAssignments })
-      });
-      if (response.ok) {
-        setModalType(null);
-        // Refresh users list
-        const usersRes = await fetch('http://localhost:5000/api/users', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const usersData = await usersRes.json();
-        if (usersRes.ok) setUsersList(usersData);
-        alert('User application access rights updated.');
-      } else {
-        const errorData = await response.json();
-        alert(errorData.error || 'Failed to assign applications');
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-    try {
-      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
-        method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (response.ok) {
-        setUsersList(usersList.filter(u => u.id !== userId));
+      if (res.ok) {
+        alert('Server remote power cycle initiated.');
+        // Refresh servers and log panel
+        const serversRes = await fetch('http://localhost:5000/api/servers', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const serversData = await serversRes.json();
+        if (serversRes.ok) setServersList(serversData);
+
+        const logsRes = await fetch('http://localhost:5000/api/audit-logs', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const logsData = await logsRes.json();
+        if (logsRes.ok) setAuditLogsList(logsData);
       }
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handlePingServer = async (serverId: string) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/servers/${serverId}/ping`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Server Status: ONLINE.\nLatency response: ${data.latency}`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleClearAuditLogs = async () => {
+    if (!confirm('Are you sure you want to clear all provisioning history?')) return;
+    try {
+      const res = await fetch('http://localhost:5000/api/audit-logs/clear', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const logsRes = await fetch('http://localhost:5000/api/audit-logs', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const logsData = await logsRes.json();
+        if (logsRes.ok) setAuditLogsList(logsData);
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -358,6 +351,23 @@ export default function Dashboard() {
       });
       if (response.ok) {
         setCompanies(companies.filter(c => c.id !== companyId));
+        fetchDashboardData(token, user);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user mapping?')) return;
+    try {
+      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        setUsersList(usersList.filter(u => u.id !== userId));
+        fetchDashboardData(token, user);
       }
     } catch (error) {
       console.error(error);
@@ -408,9 +418,21 @@ export default function Dashboard() {
     setModalType('assign-apps');
   };
 
+  const openResetPasswordModal = (userItem: any) => {
+    setSelectedItem(userItem);
+    setPasswordResetForm({ newPassword: '' });
+    setModalType('reset-password');
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('chanakya_token');
+    localStorage.removeItem('chanakya_user');
+    router.push('/login');
+  };
+
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-sans">
+      <div className="min-h-screen flex items-center justify-center bg-slate-150 text-slate-700 font-sans">
         <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
       </div>
     );
@@ -421,46 +443,59 @@ export default function Dashboard() {
   const isAnyAdmin = isSystemAdmin || isCompanyAdmin;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background-light dark:bg-background-dark font-sans select-none">
+    <div className="flex h-screen overflow-hidden bg-[#f8fafc] font-sans select-none">
       
-      {/* 1. SIDEBAR (ALWAYS ON THE LEFT) */}
-      <aside className="w-[260px] bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 transition-all duration-300">
+      {/* 1. SIDEBAR */}
+      <aside className="w-[260px] bg-slate-50 border-r border-slate-200 flex flex-col z-20 shrink-0">
         
         {/* Brand Header */}
-        <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-200 flex items-center justify-between">
           <div className="relative w-40 h-10 flex items-center">
             <Image
               src="/chanakya-logo.png"
               alt="Chanakya Logo"
               fill
               priority
-              className="object-contain dark:brightness-100 brightness-110"
+              className="object-contain brightness-110"
             />
           </div>
-
         </div>
 
-        {/* Sidebar Navigation */}
+        {/* Navigation Section */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-7">
-          
-          {/* Main Action Links */}
           <div className="space-y-1.5">
-            <div className="text-[10px] uppercase font-bold tracking-widest text-text-muted-light dark:text-text-muted-dark px-2.5 mb-2">
+            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 px-2.5 mb-2">
               Workspace Overview
             </div>
             
             <button 
               onClick={() => setActiveView('home')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition ${activeView === 'home' ? 'bg-brand-blue text-white shadow-md shadow-brand-blue/10' : 'text-text-muted-light dark:text-text-muted-dark hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition ${activeView === 'home' ? 'bg-[#005fa8] text-white shadow-md shadow-brand-blue/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
             >
               <LayoutDashboard className="w-4 h-4" />
               <span>Dashboard View</span>
             </button>
 
+            <button 
+              onClick={() => setActiveView('workspace')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition ${activeView === 'workspace' ? 'bg-[#005fa8] text-white shadow-md shadow-brand-blue/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              <Server className="w-4 h-4" />
+              <span>Workspace Node</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveView('settings')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition ${activeView === 'settings' ? 'bg-[#005fa8] text-white shadow-md shadow-brand-blue/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Connection Profile</span>
+            </button>
+
             {isAnyAdmin && (
               <button 
                 onClick={() => setActiveView('admin')}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition ${activeView === 'admin' ? 'bg-brand-blue text-white shadow-md shadow-brand-blue/10' : 'text-text-muted-light dark:text-text-muted-dark hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold transition ${activeView === 'admin' ? 'bg-[#005fa8] text-white shadow-md shadow-brand-blue/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
               >
                 <Shield className="w-4 h-4" />
                 <span>Admin Console</span>
@@ -468,17 +503,17 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Applications list shortcut */}
+          {/* Quick List applications */}
           <div className="space-y-1.5">
-            <div className="text-[10px] uppercase font-bold tracking-widest text-text-muted-light dark:text-text-muted-dark px-2.5 mb-2">
+            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 px-2.5 mb-2">
               My Virtual Applications
             </div>
             {loadingData ? (
-              <div className="px-3 text-xs text-text-muted-light dark:text-text-muted-dark flex items-center gap-1.5">
-                <Loader2 className="w-3 h-3 animate-spin" /> Loading list...
+              <div className="px-3 text-xs text-slate-400 flex items-center gap-1.5 animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin text-brand-blue" /> Mappings sync...
               </div>
             ) : allowedApps.length === 0 ? (
-              <div className="px-3 text-xs text-text-muted-light dark:text-text-muted-dark italic">
+              <div className="px-3 text-xs text-slate-400 italic">
                 No apps assigned.
               </div>
             ) : (
@@ -487,7 +522,7 @@ export default function Dashboard() {
                   <button
                     key={app.id}
                     onClick={() => handleLaunchApp(app)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left group ${activeApp?.id === app.id ? 'bg-slate-200 dark:bg-slate-900 text-brand-blue font-bold' : 'text-text-muted-light dark:text-text-muted-dark hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-foreground'}`}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left group text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="shrink-0">{getAppIcon(app.icon)}</span>
@@ -501,42 +536,32 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* User profile footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-950/50">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-brand-blue/10 dark:bg-brand-blue/20 flex items-center justify-center text-brand-blue font-bold text-xs">
-              {user.name.charAt(0).toUpperCase()}
+        {/* Sidebar Footer User controls */}
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0 border border-slate-300">
+              <User className="w-4 h-4 text-[#005fa8]" />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-bold truncate text-foreground">{user.name}</div>
-              <div className="text-[10px] font-semibold text-brand-orange mt-0.5 tracking-wider uppercase">
-                {user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'COMPANY_ADMIN' ? 'Company Admin' : 'User'}
-              </div>
+            <div className="min-w-0 flex flex-col">
+              <span className="text-xs font-bold text-slate-950 truncate">{user.name}</span>
+              <span className="text-[9px] text-slate-400 font-semibold truncate capitalize">{user.role.replace('_', ' ')}</span>
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button 
-              onClick={() => setActiveView('settings')}
-              className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900 text-[10px] font-semibold text-text-muted-light dark:text-text-muted-dark transition"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Settings</span>
-            </button>
-            <button 
-              onClick={handleSignOut}
-              className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 text-[10px] font-bold text-rose-500 transition cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Sign Out</span>
-            </button>
-          </div>
+          <button 
+            onClick={handleSignOut}
+            className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-200 text-slate-500 hover:text-slate-900 transition cursor-pointer"
+            title="Logout Portal"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </aside>
 
-      {/* 2. MAIN CONTENT CONTAINER */}
-      <main className="flex-1 h-full overflow-y-auto flex flex-col relative z-10 bg-background-light dark:bg-background-dark">
-        <div className="p-6 md:p-8 flex-1 flex flex-col max-w-7xl mx-auto w-full">
+      {/* 2. MAIN WORKSPACE VIEWPORT */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden">
+        
+        {/* Main Scrolling Viewport Container */}
+        <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 max-w-6xl w-full mx-auto">
           
           <AnimatePresence mode="wait">
             
@@ -547,29 +572,31 @@ export default function Dashboard() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-8 flex-1 flex flex-col"
+                className="space-y-6 flex-1 flex flex-col"
               >
-                {/* Welcome Tenant Header Banner */}
-                <div className="glass-panel p-6 rounded-2xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="absolute top-[-10%] right-[-10%] w-[200px] h-[200px] rounded-full bg-brand-blue/10 dark:bg-brand-blue/5 blur-[50px] pointer-events-none" />
-                  <div>
-                    <h1 className="text-xl md:text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
-                      Welcome back, {user.name} 👋
+                {/* Banner Profile Welcome Card */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white border border-slate-200 p-6 md:p-8 rounded-2xl shadow-sm relative overflow-hidden">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#005fa8]/10 border border-[#005fa8]/10 text-xs font-bold text-[#005fa8]">
+                      <Activity className="w-3.5 h-3.5" />
+                      <span>Enterprise Security Active</span>
+                    </div>
+                    <h1 className="text-2xl md:text-3xl font-black text-slate-950 tracking-tight">
+                      Welcome Back, <span className="text-brand-blue">{user.name}</span>
                     </h1>
-                    <p className="text-sm mt-1.5 text-text-muted-light dark:text-text-muted-dark max-w-xl leading-relaxed">
-                      You are connected to the <strong className="text-foreground">{user.company?.name || 'Global Cloud Admin'}</strong> secure application gateway. Launch any virtualized workspace application below.
+                    <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                      Chanakya Cloud secures your virtual applications. Select an assigned application to initiate a direct connection session with the RDP gateway.
                     </p>
                   </div>
-                  <div className="shrink-0 flex flex-col text-xs font-semibold p-3.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200/50 dark:border-slate-800/50 min-w-[200px]">
-                    <div className="text-[10px] text-text-muted-light dark:text-text-muted-dark uppercase tracking-wider">WORKSPACE METADATA</div>
+                  <div className="shrink-0 flex flex-col text-xs font-semibold p-3.5 rounded-xl bg-slate-50 border border-slate-200 min-w-[220px]">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">WORKSPACE METADATA</div>
                     <div className="flex justify-between items-center mt-2.5">
                       <span>Status:</span>
                       <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/10">Active</span>
                     </div>
                     <div className="flex justify-between items-center mt-2">
-                      <span>Gateway Domain:</span>
-                      <span className="text-slate-400 font-mono select-all">{user.company?.slug || 'global'}.chanakya.cloud</span>
+                      <span>Gateway Host:</span>
+                      <span className="text-slate-600 font-mono select-all">{user.company?.slug || 'global'}.chanakya.cloud</span>
                     </div>
                   </div>
                 </div>
@@ -579,34 +606,34 @@ export default function Dashboard() {
                   
                   {/* Metric 1 */}
                   <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-brand-blue/10 dark:bg-brand-blue/20 text-brand-blue">
+                    <div className="p-3 rounded-lg bg-brand-blue/10 text-brand-blue border border-brand-blue/20">
                       <Monitor className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-[10px] text-text-muted-light dark:text-text-muted-dark uppercase font-bold tracking-wider">Active Apps</div>
-                      <div className="text-xl font-bold mt-0.5 text-foreground">{allowedApps.length} Assigned</div>
+                      <div className="text-[10px] text-slate-450 uppercase font-bold tracking-wider">Active Apps</div>
+                      <div className="text-xl font-bold mt-0.5 text-slate-900">{allowedApps.length} Assigned</div>
                     </div>
                   </div>
 
                   {/* Metric 2 */}
                   <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-brand-orange/10 dark:bg-brand-orange/20 text-brand-orange">
+                    <div className="p-3 rounded-lg bg-brand-orange/10 text-brand-orange border border-brand-orange/20">
                       <Activity className="w-5 h-5 animate-pulse" />
                     </div>
                     <div>
-                      <div className="text-[10px] text-text-muted-light dark:text-text-muted-dark uppercase font-bold tracking-wider">Server Telemetry</div>
-                      <div className="text-xl font-bold mt-0.5 text-foreground">99.98% SLA</div>
+                      <div className="text-[10px] text-slate-450 uppercase font-bold tracking-wider">Server Telemetry</div>
+                      <div className="text-xl font-bold mt-0.5 text-slate-900">99.98% SLA</div>
                     </div>
                   </div>
 
                   {/* Metric 3 */}
                   <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
-                    <div className="p-3 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 text-amber-500">
+                    <div className="p-3 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20">
                       <Clock className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-[10px] text-text-muted-light dark:text-text-muted-dark uppercase font-bold tracking-wider">Active Users</div>
-                      <div className="text-xl font-bold mt-0.5 text-foreground">1 Session</div>
+                      <div className="text-[10px] text-slate-450 uppercase font-bold tracking-wider">Active Users</div>
+                      <div className="text-xl font-bold mt-0.5 text-slate-900">1 Session</div>
                     </div>
                   </div>
 
@@ -614,50 +641,52 @@ export default function Dashboard() {
 
                 {/* Section header: Application Grid */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                    <h2 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h2 className="text-base font-bold text-slate-950 tracking-tight flex items-center gap-2">
                       <Layers className="w-4.5 h-4.5 text-brand-blue" />
                       <span>Available Workspace Applications</span>
                     </h2>
-                    <span className="text-xs text-text-muted-light dark:text-text-muted-dark">Click launch to connect in stealth iframe.</span>
+                    <span className="text-xs text-slate-455">Click launch to connect in stealth tab.</span>
                   </div>
 
                   {loadingData ? (
-                    <div className="py-12 flex flex-col items-center justify-center text-text-muted-light dark:text-text-muted-dark">
+                    <div className="py-12 flex flex-col items-center justify-center text-slate-450">
                       <Loader2 className="w-8 h-8 animate-spin text-brand-blue mb-3" />
                       <span className="text-sm font-semibold">Querying virtual cluster profiles...</span>
                     </div>
                   ) : allowedApps.length === 0 ? (
                     <div className="glass-panel p-10 rounded-xl text-center space-y-3">
                       <ShieldAlert className="w-10 h-10 text-brand-orange mx-auto" />
-                      <h3 className="text-sm font-bold text-foreground">No Applications Assigned</h3>
-                      <p className="text-xs text-text-muted-light dark:text-text-muted-dark max-w-sm mx-auto">
+                      <h3 className="text-sm font-bold text-slate-900">No Applications Assigned</h3>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
                         Your account hasn&apos;t been assigned any applications. Please contact your company admin to provision access key credentials.
                       </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       {allowedApps.map((app) => (
                         <motion.div
-                          whileHover={{ scale: 1.02 }}
                           key={app.id}
-                          className="glass-panel p-5 rounded-xl flex flex-col justify-between group transition hover:border-brand-blue/30 dark:hover:border-brand-blue/40 cursor-pointer"
+                          whileHover={{ y: -4 }}
+                          transition={{ duration: 0.2 }}
+                          className="glass-panel p-5 rounded-2xl flex flex-col justify-between group cursor-pointer"
+                          onClick={() => handleLaunchApp(app)}
                         >
                           <div>
                             <div className="flex items-center justify-between">
-                              <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 group-hover:bg-brand-blue/5 group-hover:border-brand-blue/20 transition">
+                              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 group-hover:bg-brand-blue/5 group-hover:border-brand-blue/20 transition">
                                 {getAppIcon(app.icon)}
                               </div>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-blue/10 text-brand-blue">Active</span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#005fa8]/10 text-brand-blue">Active</span>
                             </div>
-                            <h3 className="text-sm font-black text-foreground mt-4 group-hover:text-brand-blue transition">{app.name}</h3>
-                            <p className="text-xs mt-2 text-text-muted-light dark:text-text-muted-dark leading-relaxed">
+                            <h3 className="text-sm font-black text-slate-950 mt-4 group-hover:text-brand-blue transition">{app.name}</h3>
+                            <p className="text-xs mt-2 text-slate-500 leading-relaxed">
                               {app.description || 'No description available for this application profile.'}
                             </p>
                           </div>
                           
                           <button
-                            onClick={() => handleLaunchApp(app)}
+                            onClick={(e) => { e.stopPropagation(); handleLaunchApp(app); }}
                             className="mt-5 w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold transition shadow-sm hover:shadow shadow-brand-blue/10 cursor-pointer"
                           >
                             <Play className="w-3.5 h-3.5" />
@@ -671,8 +700,8 @@ export default function Dashboard() {
 
                 {/* Session log table */}
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                    <h2 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h2 className="text-base font-bold text-slate-950 tracking-tight flex items-center gap-2">
                       <Clock className="w-4.5 h-4.5 text-brand-blue" />
                       <span>Recent Access Sessions</span>
                     </h2>
@@ -680,42 +709,38 @@ export default function Dashboard() {
 
                   <div className="glass-panel rounded-xl overflow-hidden">
                     {loadingData ? (
-                      <div className="py-8 text-center text-xs text-text-muted-light dark:text-text-muted-dark">
-                        Loading access logs...
+                      <div className="py-8 text-center text-xs text-slate-455 animate-pulse">
+                        Synchronizing session logs...
                       </div>
                     ) : recentSessions.length === 0 ? (
-                      <div className="p-8 text-center text-xs text-text-muted-light dark:text-text-muted-dark italic">
-                        No recent active logs.
+                      <div className="p-8 text-center text-xs text-slate-400 italic">
+                        No recent connection logs mapped.
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="bg-slate-100/50 dark:bg-slate-900/50 text-text-muted-light dark:text-text-muted-dark font-bold border-b border-slate-200 dark:border-slate-800">
-                              <th className="p-3.5">User</th>
-                              <th className="p-3.5">Application</th>
-                              <th className="p-3.5">Connection Time</th>
-                              <th className="p-3.5">End Time</th>
-                              <th className="p-3.5">Session Status</th>
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                            <th className="p-3">Application</th>
+                            <th className="p-3">Connected At</th>
+                            <th className="p-3">State</th>
+                            <th className="p-3 text-right">Session Details</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recentSessions.map((session) => (
+                            <tr key={session.id} className="border-b border-slate-200/50 hover:bg-slate-50/50">
+                              <td className="p-3 font-semibold text-slate-950">{session.applicationName}</td>
+                              <td className="p-3 text-slate-500">{new Date(session.launchedAt).toLocaleString()}</td>
+                              <td className="p-3">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${session.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-200/50 text-slate-500'}`}>
+                                  {session.status}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono text-[10px] text-slate-400">c-{session.id.substring(0, 8)}</td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {recentSessions.map((sess) => (
-                              <tr key={sess.id} className="border-b border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-100/30 dark:hover:bg-slate-900/30">
-                                <td className="p-3.5 font-semibold text-foreground">{sess.user?.name || 'Local System'}</td>
-                                <td className="p-3.5">{sess.applicationName}</td>
-                                <td className="p-3.5 font-mono">{new Date(sess.launchedAt).toLocaleString()}</td>
-                                <td className="p-3.5 font-mono">{sess.endedAt ? new Date(sess.endedAt).toLocaleString() : '-'}</td>
-                                <td className="p-3.5">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sess.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/10 animate-pulse' : 'bg-slate-500/10 text-text-muted dark:text-text-muted border border-slate-500/10'}`}>
-                                    {sess.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                          ))}
+                        </tbody>
+                      </table>
                     )}
                   </div>
                 </div>
@@ -723,9 +748,185 @@ export default function Dashboard() {
               </motion.div>
             )}
 
+            {/* VIEW: WORKSPACE NODE DETAILS */}
+            {activeView === 'workspace' && (
+              <motion.div
+                key="workspace"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6 max-w-3xl mx-auto"
+              >
+                <div className="border-b border-slate-200 pb-3 flex items-center gap-2 text-slate-950 font-bold text-lg">
+                  <Server className="w-5 h-5 text-brand-blue" />
+                  <span>My Workspace Node</span>
+                </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Left block: Host parameters */}
+                  <div className="glass-panel p-5 rounded-2xl space-y-4">
+                    <h3 className="text-xs font-bold text-slate-450 uppercase tracking-wider border-b border-slate-105 pb-2">Active Server Allocation</h3>
+                    <div className="space-y-3 text-xs text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Node Name:</span>
+                        <strong className="text-slate-900">Primary RDP Node</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Domain Gateway:</span>
+                        <code className="text-brand-orange font-bold text-[10px] bg-slate-50 px-1 py-0.5 rounded">{user.company?.slug || 'global'}.chanakya.cloud</code>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Windows Username:</span>
+                        <strong className="text-slate-900">{user.windowsUsername || 'not-assigned'}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Provision Status:</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px] border border-emerald-500/10">Active</span>
+                      </div>
+                    </div>
+                  </div>
 
-            {/* VIEW: ADMIN CONSOLE */}
+                  {/* Right block: Host Telemetry metrics */}
+                  <div className="glass-panel p-5 rounded-2xl space-y-4">
+                    <h3 className="text-xs font-bold text-slate-450 uppercase tracking-wider border-b border-slate-105 pb-2">RDP Host Specs</h3>
+                    <div className="space-y-3 text-xs text-slate-600">
+                      <div className="flex justify-between">
+                        <span>OS Architecture:</span>
+                        <strong className="text-slate-900">Windows Server 2022</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>CPU Allocation:</span>
+                        <strong className="text-slate-900">8 vCPU Core</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Allocated Memory:</span>
+                        <strong className="text-slate-900">32 GB RAM</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Storage Mapping:</span>
+                        <strong className="text-slate-900">500 GB NVMe SSD</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Provisioning verify steps */}
+                <div className="glass-panel p-5 rounded-2xl space-y-4">
+                  <h3 className="text-xs font-bold text-slate-450 uppercase tracking-wider border-b border-slate-105 pb-2 flex items-center justify-between">
+                    <span>Stealth Provision Health checks</span>
+                    <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
+                      <Wifi className="w-3.5 h-3.5 animate-pulse" /> Ping Latency: 12ms
+                    </span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600 font-semibold">
+                    <div className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200/50 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>Windows Server AD account mapped</span>
+                    </div>
+                    <div className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200/50 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>User workspace home folder created</span>
+                    </div>
+                    <div className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200/50 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>Guacamole database mapping active</span>
+                    </div>
+                    <div className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200/50 rounded-xl">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>NTFS user security ACLs validated</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* VIEW: SETTINGS & RDP CLIENT TUNING */}
+            {activeView === 'settings' && (
+              <motion.div
+                key="settings"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="glass-panel p-6 rounded-2xl max-w-xl mx-auto space-y-6"
+              >
+                <div className="border-b border-slate-200 pb-3 flex items-center gap-2 text-slate-950 font-bold text-lg">
+                  <Settings className="w-5 h-5 text-brand-blue" />
+                  <span>RDP Connection Settings</span>
+                </div>
+                
+                <div className="space-y-4">
+                  {/* Graphics WebGL Toggle */}
+                  <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <Monitor className="w-4 h-4 text-brand-blue" />
+                        <span>WebGL 2.0 Acceleration</span>
+                      </div>
+                      <p className="text-[10px] text-slate-450">Accelerate remote canvas rendering via browser GPU.</p>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={settings.webglAccelerated} 
+                      onChange={(e) => setSettings({ ...settings, webglAccelerated: e.target.checked })}
+                      className="w-4 h-4 rounded text-brand-blue"
+                    />
+                  </div>
+
+                  {/* Clipboard Sync Toggle */}
+                  <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <Key className="w-4 h-4 text-brand-blue" />
+                        <span>Bi-directional Clipboard Sync</span>
+                      </div>
+                      <p className="text-[10px] text-slate-450">Synchronize text/copy data between local client and workspace.</p>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={settings.clipboardSync} 
+                      onChange={(e) => setSettings({ ...settings, clipboardSync: e.target.checked })}
+                      className="w-4 h-4 rounded text-brand-blue"
+                    />
+                  </div>
+
+                  {/* Audio redirection */}
+                  <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <Activity className="w-4 h-4 text-brand-blue" />
+                        <span>RDP Audio Redirection</span>
+                      </div>
+                      <p className="text-[10px] text-slate-450">Stream Windows system audio directly through HTML5 channels.</p>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={settings.audioRedirection} 
+                      onChange={(e) => setSettings({ ...settings, audioRedirection: e.target.checked })}
+                      className="w-4 h-4 rounded text-brand-blue"
+                    />
+                  </div>
+
+                  {/* Printer redirection */}
+                  <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-brand-blue" />
+                        <span>Redirect Local Printers</span>
+                      </div>
+                      <p className="text-[10px] text-slate-450">Pass client system printers directly into your RemoteApp session.</p>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={settings.printerRedirection} 
+                      onChange={(e) => setSettings({ ...settings, printerRedirection: e.target.checked })}
+                      className="w-4 h-4 rounded text-brand-blue"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* VIEW: ADMIN COMMAND CONSOLE */}
             {activeView === 'admin' && isAnyAdmin && (
               <motion.div
                 key="admin"
@@ -736,38 +937,39 @@ export default function Dashboard() {
               >
                 
                 {/* Admin Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
                   <div>
-                    <h1 className="text-xl md:text-2xl font-black text-foreground">Admin Command Console</h1>
-                    <p className="text-xs text-text-muted-light dark:text-text-muted-dark mt-1">Configure company profiles, invite cloud users, and assign workspace application profiles.</p>
+                    <h1 className="text-xl md:text-2xl font-black text-slate-950">Admin Command Console</h1>
+                    <p className="text-xs text-slate-500 mt-1">Configure company profiles, invite cloud users, manage Windows RDP servers, and track provisioning audit logs.</p>
                   </div>
                   
-                  {/* Create Buttons dropdown style */}
+                  {/* Create Buttons based on tab */}
                   <div className="flex gap-2 shrink-0">
-                    {isSystemAdmin && (
+                    {isSystemAdmin && activeAdminTab === 'companies' && (
                       <button 
-                        onClick={() => setModalType('create-company')}
-                        className="flex items-center gap-1 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold py-2 px-3.5 rounded-lg cursor-pointer transition shadow shadow-brand-blue/10"
+                        onClick={() => {
+                          setCompanyForm({ name: '', slug: '', windowsServerId: '' });
+                          setModalType('create-company');
+                        }}
+                        className="flex items-center gap-1 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold py-2 px-3.5 rounded-lg cursor-pointer transition shadow"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Create Company</span>
+                        <span>Add Workspace</span>
                       </button>
                     )}
-                    <button 
-                      onClick={() => {
-                        // Preset fields based on admin company
-                        setUserForm(prev => ({
-                          ...prev,
-                          companyId: isCompanyAdmin ? (user.companyId || '') : ''
-                        }));
-                        setModalType('create-user');
-                      }}
-                      className="flex items-center gap-1 bg-[#1e293b] hover:bg-[#0f172a] text-white text-xs font-bold py-2 px-3.5 rounded-lg cursor-pointer border border-slate-200 dark:border-slate-800 transition"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Create User</span>
-                    </button>
-                    {isSystemAdmin && (
+                    {activeAdminTab === 'users' && (
+                      <button 
+                        onClick={() => {
+                          setUserForm({ name: '', email: '', password: '', role: 'USER', companyId: isSystemAdmin ? '' : (user.companyId || ''), allowedApplications: [] });
+                          setModalType('create-user');
+                        }}
+                        className="flex items-center gap-1 bg-[#005fa8] hover:bg-[#004c86] text-white text-xs font-bold py-2 px-3.5 rounded-lg cursor-pointer transition shadow"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Create User</span>
+                      </button>
+                    )}
+                    {isSystemAdmin && activeAdminTab === 'apps' && (
                       <button 
                         onClick={() => setModalType('create-app')}
                         className="flex items-center gap-1 bg-brand-orange hover:bg-brand-orange/90 text-white text-xs font-bold py-2 px-3.5 rounded-lg cursor-pointer transition shadow"
@@ -776,51 +978,123 @@ export default function Dashboard() {
                         <span>Create App</span>
                       </button>
                     )}
+                    {activeAdminTab === 'logs' && (
+                      <button 
+                        onClick={handleClearAuditLogs}
+                        className="flex items-center gap-1 border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-bold py-2 px-3.5 rounded-lg cursor-pointer transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Clear History</span>
+                      </button>
+                    )}
                   </div>
+                </div>
+
+                {/* TAB SELECTORS */}
+                <div className="flex gap-1.5 border-b border-slate-200 pb-2 overflow-x-auto">
+                  <button 
+                    onClick={() => setActiveAdminTab('companies')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${activeAdminTab === 'companies' ? 'bg-[#005fa8] text-white border-transparent' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 border-transparent'}`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Companies</span>
+                  </button>
+
+                  <button 
+                    onClick={() => setActiveAdminTab('users')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${activeAdminTab === 'users' ? 'bg-[#005fa8] text-white border-transparent' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 border-transparent'}`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Users</span>
+                  </button>
+
+                  {isSystemAdmin && (
+                    <>
+                      <button 
+                        onClick={() => setActiveAdminTab('apps')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${activeAdminTab === 'apps' ? 'bg-[#005fa8] text-white border-transparent' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 border-transparent'}`}
+                      >
+                        <Monitor className="w-3.5 h-3.5" />
+                        <span>Apps Catalogue</span>
+                      </button>
+
+                      <button 
+                        onClick={() => setActiveAdminTab('servers')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${activeAdminTab === 'servers' ? 'bg-[#005fa8] text-white border-transparent' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 border-transparent'}`}
+                      >
+                        <Server className="w-3.5 h-3.5" />
+                        <span>Windows Servers</span>
+                      </button>
+                    </>
+                  )}
+
+                  <button 
+                    onClick={() => setActiveAdminTab('logs')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${activeAdminTab === 'logs' ? 'bg-[#005fa8] text-white border-transparent' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 border-transparent'}`}
+                  >
+                    <Terminal className="w-3.5 h-3.5" />
+                    <span>Provisioning logs</span>
+                  </button>
                 </div>
 
                 {/* Sub Tab selection panels */}
                 <div className="grid grid-cols-1 gap-6">
                   
-                  {/* Companies section (Super Admin only) */}
-                  {isSystemAdmin && (
+                  {/* TAB 1: Companies (Super Admin only) */}
+                  {activeAdminTab === 'companies' && isSystemAdmin && (
                     <div className="space-y-3">
-                      <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-brand-blue" />
-                        <span>Company Workspace Tenants</span>
-                      </h2>
                       <div className="glass-panel rounded-xl overflow-hidden">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
-                            <tr className="bg-slate-100/50 dark:bg-slate-900/50 text-text-muted-light dark:text-text-muted-dark font-bold border-b border-slate-200 dark:border-slate-800">
+                            <tr className="bg-slate-55 text-slate-500 font-bold border-b border-slate-200">
                               <th className="p-3">Company</th>
                               <th className="p-3">Slug / Endpoint</th>
+                              <th className="p-3">RDP Server Host</th>
                               <th className="p-3">User Count</th>
-                              <th className="p-3">Status</th>
+                              <th className="p-3">State</th>
                               <th className="p-3 text-right">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {companies.map((c) => (
-                              <tr key={c.id} className="border-b border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-100/20 dark:hover:bg-slate-900/20">
-                                <td className="p-3 font-semibold text-foreground">{c.name}</td>
+                              <tr key={c.id} className="border-b border-slate-200/50 hover:bg-slate-50/50">
+                                <td className="p-3 font-semibold text-slate-950">
+                                  <div 
+                                    onClick={() => router.push(`/dashboard/companies/${c.id}`)}
+                                    className="hover:underline hover:text-brand-blue cursor-pointer transition"
+                                  >
+                                    {c.name}
+                                  </div>
+                                  <div className="text-[9px] text-slate-400 mt-0.5">ID: {c.id.substring(0, 8)}...</div>
+                                </td>
                                 <td className="p-3 font-mono">{c.slug}.chanakya.cloud</td>
+                                <td className="p-3">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+                                    <Server className="w-3 h-3 text-[#005fa8]" />
+                                    <span>{serversList.find(s => s.id === c.windowsServerId)?.name || 'Default RDP Server'}</span>
+                                  </span>
+                                </td>
                                 <td className="p-3 font-bold text-brand-blue">{c.userCount || 0} Accounts</td>
                                 <td className="p-3">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                                    {c.status}
-                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                                      {c.status}
+                                    </span>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-600">
+                                      {c.provisionStatus || 'PROVISIONED'}
+                                    </span>
+                                  </div>
                                 </td>
                                 <td className="p-3 text-right space-x-2">
                                   <button 
                                     onClick={() => handleToggleCompanyStatus(c)}
-                                    className="text-[10px] font-bold border border-slate-200 dark:border-slate-800 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-900 transition"
+                                    className="text-[10px] font-bold border border-slate-200 px-2 py-1 rounded hover:bg-slate-100 transition cursor-pointer"
                                   >
                                     Toggle State
                                   </button>
                                   <button 
                                     onClick={() => handleDeleteCompany(c.id)}
-                                    className="text-rose-500 hover:text-rose-600 transition"
+                                    className="text-rose-500 hover:text-rose-600 transition cursor-pointer"
                                     title="Delete Company"
                                   >
                                     <Trash2 className="w-4 h-4 inline" />
@@ -834,85 +1108,93 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {/* Users section */}
-                  <div className="space-y-3">
-                    <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <Users className="w-4 h-4 text-brand-blue" />
-                      <span>Workspace User Accounts</span>
-                    </h2>
-                    <div className="glass-panel rounded-xl overflow-hidden">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-100/50 dark:bg-slate-900/50 text-text-muted-light dark:text-text-muted-dark font-bold border-b border-slate-200 dark:border-slate-800">
-                            <th className="p-3">User</th>
-                            <th className="p-3">Email</th>
-                            <th className="p-3">Workspace Tenant</th>
-                            <th className="p-3">System Role</th>
-                            <th className="p-3">App Assignments</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {usersList.map((u) => (
-                            <tr key={u.id} className="border-b border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-100/20 dark:hover:bg-slate-900/20">
-                              <td className="p-3 font-semibold text-foreground">{u.name}</td>
-                              <td className="p-3 font-mono">{u.email}</td>
-                              <td className="p-3">{u.company?.name || 'Global Admin'}</td>
-                              <td className="p-3 font-semibold text-brand-orange">{u.role}</td>
-                              <td className="p-3 font-bold text-brand-blue">
-                                {u.allowedApplications?.length || 0} Apps Assigned
-                              </td>
-                              <td className="p-3">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                                  {u.status}
-                                </span>
-                              </td>
-                              <td className="p-3 text-right space-x-2 flex items-center justify-end">
-                                <button 
-                                  onClick={() => handleToggleUserStatus(u)}
-                                  className="text-[10px] font-bold border border-slate-200 dark:border-slate-800 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-900 transition"
-                                >
-                                  Toggle Status
-                                </button>
-                                <button 
-                                  onClick={() => openAssignApplicationsModal(u)}
-                                  className="text-[10px] font-bold bg-brand-blue/10 text-brand-blue border border-brand-blue/10 px-2 py-1 rounded hover:bg-brand-blue/15 transition"
-                                >
-                                  Assign Apps
-                                </button>
-                                <button 
-                                  onClick={() => { setSelectedItem(u); setModalType('reset-password'); }}
-                                  className="text-[10px] font-bold border border-slate-200 dark:border-slate-800 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-900 transition"
-                                >
-                                  Reset PWD
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteUser(u.id)}
-                                  className="text-rose-500 hover:text-rose-600 transition"
-                                  title="Delete User"
-                                >
-                                  <Trash2 className="w-4 h-4 inline" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Application profiles list (Super Admin only view) */}
-                  {isSystemAdmin && (
+                  {/* TAB 2: Users (Admin & Super Admin) */}
+                  {activeAdminTab === 'users' && (
                     <div className="space-y-3">
-                      <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-                        <Monitor className="w-4 h-4 text-brand-blue" />
-                        <span>System Application Catalogue</span>
-                      </h2>
                       <div className="glass-panel rounded-xl overflow-hidden">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
-                            <tr className="bg-slate-100/50 dark:bg-slate-900/50 text-text-muted-light dark:text-text-muted-dark font-bold border-b border-slate-200 dark:border-slate-800">
+                            <tr className="bg-slate-55 text-slate-500 font-bold border-b border-slate-200">
+                              <th className="p-3">User Account</th>
+                              <th className="p-3">Mapped Windows User</th>
+                              <th className="p-3">Role</th>
+                              <th className="p-3">Company Workspace</th>
+                              <th className="p-3">Assigned Apps</th>
+                              <th className="p-3">Provision</th>
+                              <th className="p-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {usersList.map((u) => (
+                              <tr key={u.id} className="border-b border-slate-200/50 hover:bg-slate-50/50">
+                                <td className="p-3">
+                                  <div 
+                                    onClick={() => router.push(`/dashboard/users/${u.id}`)}
+                                    className="font-semibold text-slate-950 hover:underline hover:text-brand-blue cursor-pointer transition"
+                                  >
+                                    {u.name}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">{u.email}</div>
+                                </td>
+                                <td className="p-3">
+                                  <code className="text-[10px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-800 font-mono border border-slate-200">{u.windowsUsername || 'not-provisioned'}</code>
+                                </td>
+                                <td className="p-3 font-semibold capitalize text-slate-600 text-[10px]">
+                                  {u.role.toLowerCase().replace('_', ' ')}
+                                </td>
+                                <td className="p-3 text-slate-500 font-medium">
+                                  {u.company?.name || <span className="text-[10px] text-slate-400 italic">Global Super Admin</span>}
+                                </td>
+                                <td className="p-3 font-bold text-brand-blue">
+                                  {u.allowedApplications?.length || 0} applications
+                                </td>
+                                <td className="p-3">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${u.provisionStatus === 'PROVISIONED' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-600'}`}>
+                                    {u.provisionStatus || 'PROVISIONED'}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-right space-x-2.5">
+                                  <button
+                                    onClick={() => openAssignApplicationsModal(u)}
+                                    className="text-[10px] text-[#005fa8] hover:underline font-bold transition cursor-pointer"
+                                  >
+                                    Assign Apps
+                                  </button>
+                                  <button
+                                    onClick={() => openResetPasswordModal(u)}
+                                    className="text-[10px] text-slate-500 hover:text-slate-900 font-bold transition cursor-pointer border border-slate-200 px-2 py-0.5 rounded hover:bg-slate-100"
+                                  >
+                                    Reset Password
+                                  </button>
+                                  <button 
+                                    onClick={() => handleToggleUserStatus(u)}
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded border transition cursor-pointer ${u.status === 'ACTIVE' ? 'border-amber-200 text-amber-600 hover:bg-amber-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}
+                                  >
+                                    {u.status === 'ACTIVE' ? 'Disable' : 'Enable'}
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteUser(u.id)}
+                                    className="text-rose-500 hover:text-rose-600 transition cursor-pointer"
+                                    title="Delete User"
+                                  >
+                                    <Trash2 className="w-4 h-4 inline" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: Global applications catalogue (Super Admin only) */}
+                  {activeAdminTab === 'apps' && isSystemAdmin && (
+                    <div className="space-y-3">
+                      <div className="glass-panel rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-55 text-slate-500 font-bold border-b border-slate-200">
                               <th className="p-3">App Profile</th>
                               <th className="p-3">Executable Path</th>
                               <th className="p-3">Guacamole Connection ID</th>
@@ -922,16 +1204,16 @@ export default function Dashboard() {
                           </thead>
                           <tbody>
                             {globalApps.map((a) => (
-                              <tr key={a.id} className="border-b border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-100/20 dark:hover:bg-slate-900/20">
+                              <tr key={a.id} className="border-b border-slate-200/50 hover:bg-slate-50/50">
                                 <td className="p-3 flex items-center gap-2.5">
                                   <span className="shrink-0">{getAppIcon(a.icon)}</span>
                                   <div>
-                                    <div className="font-bold text-foreground">{a.name}</div>
-                                    <div className="text-[10px] text-text-muted">{a.description}</div>
+                                    <div className="font-bold text-slate-900">{a.name}</div>
+                                    <div className="text-[10px] text-slate-450">{a.description}</div>
                                   </div>
                                 </td>
                                 <td className="p-3 font-mono text-slate-400">{a.executable}</td>
-                                <td className="p-3 font-mono">{a.guacamoleConnectionId || 'Simulated Sandbox fallback'}</td>
+                                <td className="p-3 font-mono">{a.guacamoleConnectionId || '1'}</td>
                                 <td className="p-3">
                                   <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px]">
                                     {a.status}
@@ -954,7 +1236,7 @@ export default function Dashboard() {
                                         console.error(error);
                                       }
                                     }}
-                                    className="text-rose-500 hover:text-rose-600 transition"
+                                    className="text-rose-500 hover:text-rose-600 transition cursor-pointer"
                                   >
                                     <Trash2 className="w-4 h-4 inline" />
                                   </button>
@@ -967,51 +1249,115 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                </div>
-              </motion.div>
-            )}
+                  {/* TAB 4: Windows RDP Servers (Super Admin only) */}
+                  {activeAdminTab === 'servers' && isSystemAdmin && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {serversList.map((srv) => (
+                          <div key={srv.id} className="glass-panel p-5 rounded-2xl space-y-4 relative overflow-hidden">
+                            <div className="flex justify-between items-start border-b border-slate-105 pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-lg bg-brand-blue/15 text-brand-blue border border-brand-blue/10">
+                                  <Server className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h3 className="text-sm font-black text-slate-900">{srv.name}</h3>
+                                  <div className="text-[10px] text-slate-400 mt-0.5">{srv.os}</div>
+                                </div>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${srv.status === 'ONLINE' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/10' : 'bg-amber-500/10 text-amber-600 border-amber-500/10 animate-pulse'}`}>
+                                {srv.status}
+                              </span>
+                            </div>
 
-            {/* VIEW: SETTINGS */}
-            {activeView === 'settings' && (
-              <motion.div
-                key="settings"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="glass-panel p-6 rounded-2xl max-w-xl mx-auto space-y-6"
-              >
-                <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center gap-2 text-foreground font-bold">
-                  <Settings className="w-5 h-5 text-brand-blue" />
-                  <span>Workspace Settings</span>
-                </div>
-                
-                <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-3 text-[11px] text-slate-500 font-semibold">
+                              <div className="flex items-center gap-1.5">
+                                <Activity className="w-3.5 h-3.5 text-slate-450" />
+                                <span>Health: <strong className="text-slate-900">{srv.health}</strong></span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Monitor className="w-3.5 h-3.5 text-slate-455" />
+                                <span>Active Apps: <strong className="text-slate-900">{srv.runningApps} Profiles</strong></span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-slate-455" />
+                                <span>Users connected: <strong className="text-slate-900">{srv.connectedUsers} RDP</strong></span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Globe className="w-3.5 h-3.5 text-slate-455" />
+                                <span>IP: <strong className="text-slate-900 font-mono">{srv.publicIp}</strong></span>
+                              </div>
+                            </div>
 
+                            <div className="bg-slate-50 rounded-xl p-3 grid grid-cols-3 gap-2 text-center text-[10px] border border-slate-200">
+                              <div>
+                                <div className="text-slate-400 font-bold">CPU</div>
+                                <div className="text-slate-800 font-extrabold mt-0.5 flex items-center justify-center gap-0.5"><Cpu className="w-3 h-3 text-[#005fa8]" />{srv.cpu}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400 font-bold">RAM</div>
+                                <div className="text-slate-800 font-extrabold mt-0.5">{srv.ram}</div>
+                              </div>
+                              <div>
+                                <div className="text-slate-400 font-bold">NVMe</div>
+                                <div className="text-slate-800 font-extrabold mt-0.5 flex items-center justify-center gap-0.5"><HardDrive className="w-3 h-3 text-[#005fa8]" />{srv.storage}</div>
+                              </div>
+                            </div>
 
-                  <div className="border-t border-slate-200 dark:border-slate-850 pt-4 space-y-2.5">
-                    <h3 className="text-xs font-bold text-text-muted-light dark:text-text-muted-dark uppercase tracking-wider mb-1">RDP streaming profiles</h3>
-                    <div className="flex justify-between items-center text-xs">
-                      <span>HTML5 Canvas Accelerator:</span>
-                      <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/10">WebGL 2.0 Enabled</span>
+                            <div className="flex justify-end gap-2 pt-2 border-t border-slate-105">
+                              <button 
+                                onClick={() => handlePingServer(srv.id)}
+                                className="flex items-center gap-1 text-[10px] font-bold border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                              >
+                                <Wifi className="w-3.5 h-3.5" />
+                                <span>Ping latency</span>
+                              </button>
+                              <button 
+                                onClick={() => handleRebootServer(srv.id)}
+                                className="flex items-center gap-1 text-[10px] font-bold border border-amber-200 bg-amber-500/10 text-amber-600 px-3 py-1.5 rounded-lg hover:bg-amber-500 hover:text-white transition cursor-pointer"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Reboot Server</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span>Default Resolution:</span>
-                      <span className="text-slate-400 font-semibold">Match Browser Window</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span>Clipboard Sync:</span>
-                      <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/10">Bidirectional</span>
-                    </div>
-                  </div>
-                </div>
+                  )}
 
-                <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-850">
-                  <button 
-                    onClick={() => setActiveView('home')}
-                    className="bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold py-2 px-4 rounded-lg cursor-pointer transition shadow"
-                  >
-                    Close Settings
-                  </button>
+                  {/* TAB 5: Provisioning Logs Terminal Console */}
+                  {activeAdminTab === 'logs' && (
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-2 text-slate-500 font-semibold">
+                          <Activity className="w-4 h-4 text-brand-orange animate-pulse" />
+                          <span>Streaming RDP user/tenant provisioning events (latest 100)</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-850 rounded-2xl p-5 shadow-inner">
+                        <div className="font-mono text-[10px] leading-relaxed overflow-y-auto max-h-[450px] space-y-1.5 pr-2 select-text">
+                          {auditLogsList.length === 0 ? (
+                            <div className="text-slate-500 italic py-6 text-center">No syslog events recorded.</div>
+                          ) : (
+                            auditLogsList.map((log) => (
+                              <div key={log.id} className="flex flex-col sm:flex-row gap-2 border-b border-slate-800/40 pb-1.5">
+                                <span className="text-slate-550 font-semibold select-none">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                                <span className={`font-bold select-none ${log.status === 'SUCCESS' ? 'text-emerald-400' : log.status === 'WARNING' ? 'text-amber-400' : log.status === 'FAILED' ? 'text-red-400' : 'text-sky-400'}`}>
+                                  {log.status}
+                                </span>
+                                <span className="text-slate-400 font-bold select-none">[{log.module}]</span>
+                                <span className="text-slate-100 flex-1">{log.message}</span>
+                                <span className="text-slate-500 font-bold select-none italic text-[9px] shrink-0">op: {log.operator}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </motion.div>
             )}
@@ -1021,44 +1367,37 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* ==========================================
-         MODALS & OVERLAYS (GLASSMUSE STYLE)
-         ========================================== */}
-      
+      {/* 3. POPUP DIALOGS & MODAL FORMS */}
       <AnimatePresence>
         {modalType && (
-          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/45 backdrop-filter backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-panel w-full max-w-[480px] rounded-2xl overflow-hidden shadow-2xl p-6 md:p-8 space-y-6"
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white border border-slate-200 w-full max-w-[460px] rounded-2xl p-6 shadow-2xl space-y-4"
             >
-              
-              {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-                <h3 className="text-base font-black text-foreground">
-                  {modalType === 'create-company' && 'Create Company Workspace Tenant'}
-                  {modalType === 'create-user' && 'Provision User Account'}
-                  {modalType === 'create-app' && 'Add Application Catalogue Profile'}
-                  {modalType === 'reset-password' && `Reset Password for ${selectedItem?.name}`}
-                  {modalType === 'assign-apps' && `Configure App Access for ${selectedItem?.name}`}
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-955 uppercase tracking-wider">
+                  {modalType === 'create-company' && 'Add Workspace Tenant'}
+                  {modalType === 'create-user' && 'Provision User'}
+                  {modalType === 'create-app' && 'Add Application Profile'}
+                  {modalType === 'assign-apps' && 'Assign Application Permissions'}
+                  {modalType === 'reset-password' && 'Reset Security Credentials'}
                 </h3>
                 <button 
                   onClick={() => setModalType(null)}
-                  className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 text-text-muted hover:text-foreground transition"
+                  className="p-1 rounded-lg border border-slate-200 text-slate-400 hover:text-slate-950 hover:bg-slate-100 cursor-pointer"
                 >
-                  <X className="w-4.5 h-4.5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Modal Forms */}
-              
               {/* Form 1: Create Company */}
               {modalType === 'create-company' && (
                 <form onSubmit={handleCreateCompany} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Company Name</label>
+                    <label className="text-xs font-bold text-slate-700">Company Name</label>
                     <input 
                       type="text" 
                       required 
@@ -1069,7 +1408,7 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Unique Slug ID (Vanity domain endpoint)</label>
+                    <label className="text-xs font-bold text-slate-700">Unique Slug ID (Vanity domain endpoint)</label>
                     <input 
                       type="text" 
                       required 
@@ -1079,13 +1418,25 @@ export default function Dashboard() {
                       className="glass-input w-full p-2.5 rounded-lg text-xs font-mono text-foreground focus:ring-1" 
                     />
                   </div>
-
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Windows Server Node Host</label>
+                    <select 
+                      value={companyForm.windowsServerId}
+                      onChange={(e) => setCompanyForm({ ...companyForm, windowsServerId: e.target.value })}
+                      className="glass-input w-full p-2.5 rounded-lg text-xs text-slate-900 focus:ring-1"
+                    >
+                      <option value="">-- Auto Assign Default Host --</option>
+                      {serversList.map((srv) => (
+                        <option key={srv.id} value={srv.id}>{srv.name} ({srv.publicIp})</option>
+                      ))}
+                    </select>
+                  </div>
                   
                   <div className="flex justify-end gap-2 pt-2">
                     <button 
                       type="button" 
                       onClick={() => setModalType(null)}
-                      className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-900 transition"
+                      className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition"
                     >
                       Cancel
                     </button>
@@ -1103,7 +1454,7 @@ export default function Dashboard() {
               {modalType === 'create-user' && (
                 <form onSubmit={handleCreateUser} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">User Display Name</label>
+                    <label className="text-xs font-bold text-slate-700">User Display Name</label>
                     <input 
                       type="text" 
                       required 
@@ -1114,7 +1465,7 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Email Address (Username)</label>
+                    <label className="text-xs font-bold text-slate-700">Email Address (Username)</label>
                     <input 
                       type="email" 
                       required 
@@ -1125,7 +1476,7 @@ export default function Dashboard() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Initial Security Password</label>
+                    <label className="text-xs font-bold text-slate-700">Initial Security Password</label>
                     <input 
                       type="password" 
                       required 
@@ -1137,7 +1488,7 @@ export default function Dashboard() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">System Role</label>
+                      <label className="text-xs font-bold text-slate-700">System Role</label>
                       <select 
                         value={userForm.role}
                         onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
@@ -1150,15 +1501,17 @@ export default function Dashboard() {
                     </div>
                     {isSystemAdmin && (
                       <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-foreground">Assign Company</label>
+                        <label className="text-xs font-bold text-slate-700">Assign Company</label>
                         <select 
                           required
                           value={userForm.companyId}
                           onChange={(e) => setUserForm({ ...userForm, companyId: e.target.value })}
                           className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground"
                         >
-                          <option value="">Select Tenant...</option>
-                          {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          <option value="">-- Choose Tenant --</option>
+                          {companies.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
                         </select>
                       </div>
                     )}
@@ -1168,7 +1521,7 @@ export default function Dashboard() {
                     <button 
                       type="button" 
                       onClick={() => setModalType(null)}
-                      className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-900 transition"
+                      className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition"
                     >
                       Cancel
                     </button>
@@ -1176,54 +1529,54 @@ export default function Dashboard() {
                       type="submit"
                       className="px-4 py-2 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg transition cursor-pointer"
                     >
-                      Create User
+                      Provision user
                     </button>
                   </div>
                 </form>
               )}
 
-              {/* Form 3: Create Application */}
+              {/* Form 3: Create App */}
               {modalType === 'create-app' && (
-                <form onSubmit={handleCreateApplication} className="space-y-4">
+                <form onSubmit={handleCreateApp} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Application Name</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={appForm.name}
+                      onChange={(e) => setAppForm({ ...appForm, name: e.target.value })}
+                      placeholder="e.g. Tally Prime" 
+                      className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground" 
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Application Name</label>
-                      <input 
-                        type="text" 
-                        required 
-                        value={appForm.name}
-                        onChange={(e) => setAppForm({ ...appForm, name: e.target.value })}
-                        placeholder="Tally Prime" 
-                        className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground" 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Visual Icon Theme</label>
+                      <label className="text-xs font-bold text-slate-700">App Icon representation</label>
                       <select 
                         value={appForm.icon}
                         onChange={(e) => setAppForm({ ...appForm, icon: e.target.value })}
                         className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground"
                       >
-                        <option value="Calculator">Calculator (Tally Accounting)</option>
-                        <option value="Briefcase">Briefcase (Busy Suite)</option>
-                        <option value="Globe">Globe (Chrome Webapp)</option>
-                        <option value="FileSpreadsheet">FileSpreadsheet (Excel Data)</option>
-                        <option value="AppWindow">AppWindow (Standard Executable)</option>
+                        <option value="Calculator">Accounting Calculator</option>
+                        <option value="Briefcase">SaaS Briefcase</option>
+                        <option value="Globe">Web Browser Globe</option>
+                        <option value="FileSpreadsheet">Excel Spreadsheet</option>
+                        <option value="AppWindow">Standard App Window</option>
                       </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700">Guacamole Connection ID</label>
+                      <input 
+                        type="text" 
+                        value={appForm.guacamoleConnectionId}
+                        onChange={(e) => setAppForm({ ...appForm, guacamoleConnectionId: e.target.value })}
+                        placeholder="e.g. 1" 
+                        className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground" 
+                      />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Description</label>
-                    <input 
-                      type="text" 
-                      value={appForm.description}
-                      onChange={(e) => setAppForm({ ...appForm, description: e.target.value })}
-                      placeholder="Financial accounting and books auditor." 
-                      className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground" 
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Windows Executable Binary Path</label>
+                    <label className="text-xs font-bold text-slate-700">Target Executable Path</label>
                     <input 
                       type="text" 
                       required 
@@ -1233,35 +1586,21 @@ export default function Dashboard() {
                       className="glass-input w-full p-2.5 rounded-lg text-xs font-mono text-foreground" 
                     />
                   </div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Guacamole Connection ID</label>
-                      <input 
-                        type="text" 
-                        value={appForm.guacamoleConnectionId}
-                        onChange={(e) => setAppForm({ ...appForm, guacamoleConnectionId: e.target.value })}
-                        placeholder="tally-rdp-c102" 
-                        className="glass-input w-full p-2.5 rounded-lg text-xs font-mono text-foreground" 
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Guacamole Config (JSON)</label>
-                      <input 
-                        type="text" 
-                        value={appForm.guacamoleConfig}
-                        onChange={(e) => setAppForm({ ...appForm, guacamoleConfig: e.target.value })}
-                        placeholder='{"protocol": "rdp", "port": 3389}' 
-                        className="glass-input w-full p-2.5 rounded-lg text-xs font-mono text-foreground" 
-                      />
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">Short Description</label>
+                    <textarea 
+                      value={appForm.description}
+                      onChange={(e) => setAppForm({ ...appForm, description: e.target.value })}
+                      placeholder="Describe target user profile permissions..." 
+                      className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground h-16 resize-none" 
+                    />
                   </div>
 
                   <div className="flex justify-end gap-2 pt-2">
                     <button 
                       type="button" 
                       onClick={() => setModalType(null)}
-                      className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-900 transition"
+                      className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition"
                     >
                       Cancel
                     </button>
@@ -1269,31 +1608,88 @@ export default function Dashboard() {
                       type="submit"
                       className="px-4 py-2 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg transition cursor-pointer"
                     >
-                      Register App
+                      Create App Profile
                     </button>
                   </div>
                 </form>
               )}
 
-              {/* Form 4: Reset Password */}
-              {modalType === 'reset-password' && (
+              {/* Form 4: Assign applications checkbox grid */}
+              {modalType === 'assign-apps' && selectedItem && (
+                <form onSubmit={handleAssignApplications} className="space-y-4">
+                  <div className="space-y-1 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="text-xs font-bold text-slate-900">{selectedItem.name}</div>
+                    <div className="text-[10px] text-slate-505">{selectedItem.email}</div>
+                  </div>
+
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {globalApps.length === 0 ? (
+                      <div className="text-xs text-slate-400 italic">No applications seeded in dashboard.</div>
+                    ) : (
+                      globalApps.map((app) => {
+                        const checked = userAppAssignments.includes(app.id);
+                        return (
+                          <div key={app.id} className="flex items-center gap-2">
+                            <input 
+                              type="checkbox" 
+                              id={`assign-${app.id}`} 
+                              checked={checked} 
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setUserAppAssignments([...userAppAssignments, app.id]);
+                                } else {
+                                  setUserAppAssignments(userAppAssignments.filter(id => id !== app.id));
+                                }
+                              }}
+                              className="w-4 h-4 rounded text-brand-blue"
+                            />
+                            <label htmlFor={`assign-${app.id}`} className="text-xs text-slate-700 cursor-pointer select-none">
+                              {app.name} <span className="text-[9px] text-slate-400 font-mono">({app.executable.substring(0, 20)}...)</span>
+                            </label>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-150">
+                    <button 
+                      type="button" 
+                      onClick={() => setModalType(null)}
+                      className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit"
+                      className="px-4 py-2 bg-[#005fa8] hover:bg-[#004c86] text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                    >
+                      Save Assignments
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Form 5: Reset user password */}
+              {modalType === 'reset-password' && selectedItem && (
                 <form onSubmit={handleResetPassword} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">New Security Password</label>
+                    <label className="text-xs font-bold text-slate-700">New Portal Security Password</label>
                     <input 
                       type="password" 
                       required 
                       value={passwordResetForm.newPassword}
                       onChange={(e) => setPasswordResetForm({ newPassword: e.target.value })}
                       placeholder="••••••••" 
-                      className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground" 
+                      className="glass-input w-full p-2.5 rounded-lg text-xs text-slate-900" 
                     />
                   </div>
+
                   <div className="flex justify-end gap-2 pt-2">
                     <button 
                       type="button" 
                       onClick={() => setModalType(null)}
-                      className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-900 transition"
+                      className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold hover:bg-slate-100 transition"
                     >
                       Cancel
                     </button>
@@ -1301,55 +1697,7 @@ export default function Dashboard() {
                       type="submit"
                       className="px-4 py-2 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg transition cursor-pointer"
                     >
-                      Reset Password
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Form 5: Assign Applications */}
-              {modalType === 'assign-apps' && (
-                <form onSubmit={handleAssignApplicationsSubmit} className="space-y-5">
-                  <div className="text-xs text-text-muted mb-2">Check the applications this user is authorized to launch:</div>
-                  <div className="space-y-2.5 max-h-60 overflow-y-auto pr-2">
-                    {globalApps.map(app => (
-                      <label key={app.id} className="flex items-center justify-between p-2.5 rounded-lg border border-card-border hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer select-none">
-                        <div className="flex items-center gap-2.5">
-                          {getAppIcon(app.icon)}
-                          <div>
-                            <div className="text-xs font-bold text-foreground">{app.name}</div>
-                            <div className="text-[9px] text-text-muted">{app.executable}</div>
-                          </div>
-                        </div>
-                        <input 
-                          type="checkbox"
-                          checked={userAppAssignments.includes(app.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setUserAppAssignments([...userAppAssignments, app.id]);
-                            } else {
-                              setUserAppAssignments(userAppAssignments.filter(id => id !== app.id));
-                            }
-                          }}
-                          className="h-4.5 w-4.5 text-brand-blue border-card-border rounded focus:ring-brand-blue"
-                        />
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                    <button 
-                      type="button" 
-                      onClick={() => setModalType(null)}
-                      className="px-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-900 transition"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="px-4 py-2 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg transition cursor-pointer"
-                    >
-                      Save Changes
+                      Reset Credentials
                     </button>
                   </div>
                 </form>

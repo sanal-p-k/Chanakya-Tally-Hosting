@@ -7,16 +7,35 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model WindowsServer {
+  id          String    @id @default(uuid())
+  name        String
+  publicIp    String
+  privateIp   String
+  status      String    @default("ONLINE") // ONLINE, OFFLINE, MAINTENANCE, REBOOTING
+  os          String    @default("Windows Server 2022")
+  ram         String    @default("32 GB")
+  cpu         String    @default("8 vCPU")
+  storage     String    @default("500 GB NVMe SSD")
+  health      String    @default("HEALTHY") // HEALTHY, WARNING, CRITICAL
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  companies   Company[]
+}
+
 model Company {
-  id           String               @id @default(uuid())
-  name         String
-  status       String               @default("ACTIVE") // ACTIVE, SUSPENDED, INACTIVE
-  slug         String               @unique
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  users        User[]
-  applications CompanyApplication[]
-  sessions     SessionLog[]
+  id              String               @id @default(uuid())
+  name            String
+  status          String               @default("ACTIVE") // ACTIVE, SUSPENDED, INACTIVE
+  slug            String               @unique
+  windowsServerId String?
+  windowsServer   WindowsServer?       @relation(fields: [windowsServerId], references: [id], onDelete: SetNull)
+  provisionStatus String               @default("PROVISIONED") // PENDING, PROVISIONED, FAILED
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  users           User[]
+  applications    CompanyApplication[]
+  sessions        SessionLog[]
 }
 
 model User {
@@ -24,6 +43,9 @@ model User {
   name                String
   email               String            @unique
   password            String
+  windowsUsername     String?
+  windowsPassword     String?           // Encrypted AES Windows password
+  provisionStatus     String            @default("PROVISIONED") // PENDING, PROVISIONED, FAILED
   role                String            @default("USER") // SUPER_ADMIN, COMPANY_ADMIN, USER
   status              String            @default("ACTIVE") // ACTIVE, DISABLED
   companyId           String?
@@ -78,4 +100,15 @@ model SessionLog {
   launchedAt      DateTime  @default(now())
   endedAt         DateTime?
   status          String    @default("ACTIVE") // ACTIVE, COMPLETED, FAILED
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+  action    String
+  module    String
+  status    String   // SUCCESS, INFO, WARNING, FAILED
+  message   String
+  operator  String
+  details   String?
 }

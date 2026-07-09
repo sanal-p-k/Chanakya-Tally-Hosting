@@ -1,23 +1,43 @@
 import prisma from '../src/utils/prisma';
 import bcrypt from 'bcrypt';
+import { encrypt } from '../src/utils/encryption';
 
 async function main() {
   console.log('Clearing database tables...');
   
   // Clear tables in dependency order
+  await prisma.auditLog.deleteMany({});
   await prisma.sessionLog.deleteMany({});
   await prisma.userApplication.deleteMany({});
   await prisma.companyApplication.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.application.deleteMany({});
   await prisma.company.deleteMany({});
+  await prisma.windowsServer.deleteMany({});
 
   console.log('Seeding initial workspace data...');
 
   const defaultAdminPassword = await bcrypt.hash('admin123', 10);
   const defaultUserPassword = await bcrypt.hash('user123', 10);
 
-  // 1. Create Applications
+  // 1. Create Default Server Node
+  const primaryServer = await prisma.windowsServer.create({
+    data: {
+      name: 'Primary RDP Node',
+      publicIp: '3.110.6.9',
+      privateIp: '172.31.36.142',
+      status: 'ONLINE',
+      os: 'Windows Server 2022 Datacenter',
+      ram: '32 GB',
+      cpu: '8 vCPU',
+      storage: '500 GB NVMe SSD',
+      health: 'HEALTHY'
+    }
+  });
+
+  console.log('Server Node created successfully.');
+
+  // 2. Create Applications
   const appTally = await prisma.application.create({
     data: {
       name: 'Tally Prime',
@@ -27,7 +47,7 @@ async function main() {
       guacamoleConnectionId: 'tally-prime-conn',
       guacamoleConfig: {
         protocol: 'rdp',
-        hostname: '10.0.0.10',
+        hostname: '172.31.36.142',
         port: 3389,
         security: 'nla',
         ignoreCert: true
@@ -45,7 +65,7 @@ async function main() {
       guacamoleConnectionId: 'busy-conn',
       guacamoleConfig: {
         protocol: 'rdp',
-        hostname: '10.0.0.11',
+        hostname: '172.31.36.142',
         port: 3389,
         security: 'nla',
         ignoreCert: true
@@ -63,7 +83,7 @@ async function main() {
       guacamoleConnectionId: 'chrome-conn',
       guacamoleConfig: {
         protocol: 'rdp',
-        hostname: '10.0.0.12',
+        hostname: '172.31.36.142',
         port: 3389,
         security: 'nla',
         ignoreCert: true
@@ -81,7 +101,7 @@ async function main() {
       guacamoleConnectionId: 'excel-conn',
       guacamoleConfig: {
         protocol: 'rdp',
-        hostname: '10.0.0.13',
+        hostname: '172.31.36.142',
         port: 3389,
         security: 'nla',
         ignoreCert: true
@@ -92,18 +112,20 @@ async function main() {
 
   console.log('Applications created successfully.');
 
-  // 2. Create Companies
+  // 3. Create Companies linked to Server Node
   const companyChanakya = await prisma.company.create({
     data: {
       name: 'Chanakya Group',
       slug: 'chanakya',
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      windowsServerId: primaryServer.id,
+      provisionStatus: 'PROVISIONED'
     }
   });
 
   console.log('Companies created successfully.');
 
-  // 3. Link Applications to Company
+  // 4. Link Applications to Company
   await prisma.companyApplication.createMany({
     data: [
       { companyId: companyChanakya.id, applicationId: appTally.id },
@@ -113,14 +135,17 @@ async function main() {
     ]
   });
 
-  // 4. Create Users
+  // 5. Create Users with WindowsUsername mapping
   const superAdminUser = await prisma.user.create({
     data: {
       name: 'Chanakya Super Admin',
       email: 'superadmin@chanakya.cloud',
       role: 'SUPER_ADMIN',
       password: defaultAdminPassword,
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      windowsUsername: 'administrator',
+      windowsPassword: encrypt('admin123'),
+      provisionStatus: 'PROVISIONED'
     }
   });
 
@@ -131,7 +156,10 @@ async function main() {
       role: 'COMPANY_ADMIN',
       password: defaultAdminPassword,
       status: 'ACTIVE',
-      companyId: companyChanakya.id
+      companyId: companyChanakya.id,
+      windowsUsername: 'admin.chanakya',
+      windowsPassword: encrypt('admin123'),
+      provisionStatus: 'PROVISIONED'
     }
   });
 
@@ -142,13 +170,16 @@ async function main() {
       role: 'USER',
       password: defaultUserPassword,
       status: 'ACTIVE',
-      companyId: companyChanakya.id
+      companyId: companyChanakya.id,
+      windowsUsername: 'theertha.chanakya',
+      windowsPassword: encrypt('user123'),
+      provisionStatus: 'PROVISIONED'
     }
   });
 
   console.log('Users created successfully.');
 
-  // 5. Assign Applications to Theertha
+  // 6. Assign Applications to Theertha
   await prisma.userApplication.createMany({
     data: [
       { userId: clientUser.id, applicationId: appTally.id },
@@ -156,7 +187,7 @@ async function main() {
     ]
   });
 
-  // 6. Create Seed Sessions for Dashboard Visuals
+  // 7. Create Seed Sessions for Dashboard Visuals
   await prisma.sessionLog.createMany({
     data: [
       {
@@ -184,6 +215,33 @@ async function main() {
         applicationName: 'Tally Prime',
         launchedAt: new Date(Date.now() - 10 * 60000), // 10 mins ago
         status: 'ACTIVE'
+      }
+    ]
+  });
+
+  // 8. Create Provisioning Logs / Audit Logs
+  await prisma.auditLog.createMany({
+    data: [
+      {
+        action: 'SERVER_PROVISION',
+        module: 'SERVERS',
+        status: 'SUCCESS',
+        message: 'Primary RDP Node [3.110.6.9] discovered and registered.',
+        operator: 'System Daemon'
+      },
+      {
+        action: 'COMPANY_PROVISION',
+        module: 'PROVISIONING',
+        status: 'SUCCESS',
+        message: 'Created local file storage directory for company Chanakya Group on Primary RDP Node.',
+        operator: 'superadmin@chanakya.cloud'
+      },
+      {
+        action: 'USER_PROVISION',
+        module: 'PROVISIONING',
+        status: 'SUCCESS',
+        message: 'Created Windows user account theertha.chanakya on Primary RDP Node with RDP and drive mapping rights.',
+        operator: 'admin@chanakya.com'
       }
     ]
   });

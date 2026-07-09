@@ -27,6 +27,19 @@ import {
   endSession,
   getSessions
 } from '../controllers/session.controller';
+import windowsRoutes from '../modules/windows/windows.routes';
+import {
+  getServers,
+  createServer,
+  updateServer,
+  deleteServer,
+  rebootServer,
+  pingServer
+} from '../controllers/server.controller';
+import {
+  getAuditLogs,
+  clearAuditLogs
+} from '../controllers/audit.controller';
 import { authenticateJWT, requireRole } from '../middleware/auth';
 
 const router = Router();
@@ -61,5 +74,20 @@ router.delete('/apps/:id', authenticateJWT as any, requireRole(['SUPER_ADMIN']) 
 router.post('/sessions/launch', authenticateJWT as any, launchApp as any);
 router.post('/sessions/end', authenticateJWT as any, endSession as any);
 router.get('/sessions', authenticateJWT as any, getSessions as any);
+
+// --- Windows Server Routes ---
+router.get('/servers', authenticateJWT as any, requireRole(['SUPER_ADMIN', 'COMPANY_ADMIN']) as any, getServers as any);
+router.post('/servers', authenticateJWT as any, requireRole(['SUPER_ADMIN']) as any, createServer as any);
+router.put('/servers/:id', authenticateJWT as any, requireRole(['SUPER_ADMIN']) as any, updateServer as any);
+router.delete('/servers/:id', authenticateJWT as any, requireRole(['SUPER_ADMIN']) as any, deleteServer as any);
+router.post('/servers/:id/reboot', authenticateJWT as any, requireRole(['SUPER_ADMIN']) as any, rebootServer as any);
+router.get('/servers/:id/ping', authenticateJWT as any, pingServer as any);
+
+// --- Audit Log Routes ---
+router.get('/audit-logs', authenticateJWT as any, requireRole(['SUPER_ADMIN', 'COMPANY_ADMIN']) as any, getAuditLogs as any);
+router.post('/audit-logs/clear', authenticateJWT as any, requireRole(['SUPER_ADMIN']) as any, clearAuditLogs as any);
+
+// --- Windows WinRM Routes ---
+router.use(windowsRoutes);
 
 export default router;

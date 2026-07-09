@@ -94,8 +94,7 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
             id: true,
             name: true,
             slug: true,
-            status: true,
-            storageLimit: true
+            status: true
           }
         },
         allowedApplications: {
@@ -111,19 +110,16 @@ export const getMe = async (req: AuthenticatedRequest, res: Response): Promise<v
       return;
     }
 
-    // Convert storageLimit BigInt to string for JSON serialization
-    const company = user.company
-      ? {
-          ...user.company,
-          storageLimit: user.company.storageLimit.toString()
-        }
-      : null;
-
     res.json({
       user: {
-        ...user,
-        company,
-        allowedApplications: user.allowedApplications.map((ua) => ua.application)
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        companyId: user.companyId,
+        company: user.company,
+        allowedApplications: user.allowedApplications.map((ua: any) => ua.application)
       }
     });
   } catch (error) {
