@@ -134,48 +134,71 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
       }
     });
 
-    // Provision steps logs
-    await prisma.auditLog.create({
-      data: {
-        action: 'USER_PROVISION_AD',
-        module: 'PROVISIONING',
-        status: 'SUCCESS',
-        message: `Created Active Directory Windows account: ${windowsUsername} on RDP node. Mapped portal password sync.`,
-        operator: 'System Daemon'
+    // Execute Real Windows Provisioning over WinRM
+    try {
+      const connected = await windowsService.connect();
+      if (!connected) {
+        throw new Error('Could not establish WinRM connection to the Windows Server.');
       }
-    });
 
-    await prisma.auditLog.create({
-      data: {
-        action: 'USER_PROVISION_GROUPS',
-        module: 'PROVISIONING',
-        status: 'SUCCESS',
-        message: `Added user ${windowsUsername} to [Remote Desktop Users] security privileges group.`,
-        operator: 'System Daemon'
-      }
-    });
-
-    if (company) {
+      await windowsService.createLocalUser(windowsUsername, password);
+      
       await prisma.auditLog.create({
         data: {
-          action: 'USER_PROVISION_FOLDER',
+          action: 'USER_PROVISION_AD',
           module: 'PROVISIONING',
           status: 'SUCCESS',
-          message: `Mapped NTFS modify privileges on C:\\Companies\\${company.slug} for ${windowsUsername}.`,
+          message: `Created Active Directory Windows account: ${windowsUsername} on RDP node.`,
           operator: 'System Daemon'
         }
       });
-    }
 
-    await prisma.auditLog.create({
-      data: {
-        action: 'USER_PROVISION_GUAC',
-        module: 'PROVISIONING',
-        status: 'SUCCESS',
-        message: `Registered connection security settings inside Guacamole DB for client user: ${windowsUsername}.`,
-        operator: 'System Daemon'
+      await windowsService.addRemoteDesktopPermission(windowsUsername);
+      
+      await prisma.auditLog.create({
+        data: {
+          action: 'USER_PROVISION_GROUPS',
+          module: 'PROVISIONING',
+          status: 'SUCCESS',
+          message: `Added user ${windowsUsername} to [Remote Desktop Users] security privileges group.`,
+          operator: 'System Daemon'
+        }
+      });
+
+      if (company) {
+        await windowsService.grantFolderPermission(windowsUsername, `C:\\Companies\\${company.slug}`);
+        
+        await prisma.auditLog.create({
+          data: {
+            action: 'USER_PROVISION_FOLDER',
+            module: 'PROVISIONING',
+            status: 'SUCCESS',
+            message: `Mapped NTFS modify privileges on C:\\Companies\\${company.slug} for ${windowsUsername}.`,
+            operator: 'System Daemon'
+          }
+        });
       }
-    });
+    } catch (winrmError) {
+      console.error('WinRM Provisioning Error:', winrmError);
+      
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { provisionStatus: 'FAILED' }
+      });
+      
+      await prisma.auditLog.create({
+        data: {
+          action: 'USER_PROVISION_FAILED',
+          module: 'PROVISIONING',
+          status: 'ERROR',
+          message: `Failed to provision user ${windowsUsername} on Windows Server.`,
+          operator: req.user?.email || 'System'
+        }
+      });
+      
+      res.status(500).json({ error: 'Windows provisioning failed. User created in DB but failed on Server.' });
+      return;
+    }
 
     // Update status to PROVISIONED
     const finalUser = await prisma.user.update({
@@ -184,17 +207,26 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
     });
 
     res.status(201).json({
-      id: finalUser.id,
-      name: finalUser.name,
-      email: finalUser.email,
-      role: finalUser.role,
-      status: finalUser.status,
-      companyId: finalUser.companyId,
-      windowsUsername: finalUser.windowsUsername,
-      provisionStatus: finalUser.provisionStatus
+      success: true,
+      windows: true,
+      database: true,
+      user: {
+        id: finalUser.id,
+        name: finalUser.name,
+        email: finalUser.email,
+        role: finalUser.role,
+        status: finalUser.status,
+        companyId: finalUser.companyId,
+        windowsUsername: finalUser.windowsUsername,
+        provisionStatus: finalUser.provisionStatus
+      }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create user error:', error);
+    if (error.code === 'P2002') {
+      res.status(400).json({ error: 'User with this email already exists.' });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error.' });
   }
 };

@@ -107,6 +107,43 @@ export class WindowsService {
   }
 
   /**
+   * Setup automated Company Folder Hierarchy with strict isolation
+   */
+  public async setupCompanyWorkspace(companySlug: string): Promise<WinRMResult> {
+    const slug = this.sanitizeInput(companySlug);
+    const rootPath = `C:\\Companies\\${slug}`;
+    
+    const script = `
+      $rootPath = "${rootPath}"
+      if (-not (Test-Path $rootPath)) {
+        New-Item -ItemType Directory -Path $rootPath | Out-Null
+      }
+
+      $acl = Get-Acl $rootPath
+      $acl.SetAccessRuleProtection($true, $false)
+
+      $systemRule = New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+      $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule("Administrators","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+      $acl.AddAccessRule($systemRule)
+      $acl.AddAccessRule($adminRule)
+
+      Set-Acl -Path $rootPath -AclObject $acl
+
+      $subFolders = @("Tally", "Excel", "Users", "Datas")
+      foreach ($sub in $subFolders) {
+        $subPath = Join-Path -Path $rootPath -ChildPath $sub
+        if (-not (Test-Path $subPath)) {
+          New-Item -ItemType Directory -Path $subPath | Out-Null
+        }
+      }
+
+      Write-Output "Company workspace $slug provisioned successfully."
+    `;
+
+    return await this.executor.executeScript(script);
+  }
+
+  /**
    * Test connection and retrieve host information
    */
   public async testConnection(): Promise<any> {

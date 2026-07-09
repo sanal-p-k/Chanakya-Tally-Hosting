@@ -57,26 +57,56 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
       });
     }
 
-    // Provision steps log
-    await prisma.auditLog.create({
-      data: {
-        action: 'COMPANY_PROVISION_FOLDER',
-        module: 'PROVISIONING',
-        status: 'SUCCESS',
-        message: `Created Windows Shared Folder: C:\\Companies\\${company.slug} on Server Node. NTFS storage active.`,
-        operator: 'System Daemon'
+    // Real WinRM Folder Provisioning
+    try {
+      const connected = await windowsService.connect();
+      if (!connected) {
+        throw new Error('Could not establish WinRM connection to the Windows Server.');
       }
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        action: 'COMPANY_PROVISION_GATEWAY',
-        module: 'PROVISIONING',
-        status: 'SUCCESS',
-        message: `Virtual workspace gateway mapped. Subdomain entry: ${company.slug}.chanakya.cloud ➔ Active`,
-        operator: 'System Daemon'
-      }
-    });
+      
+      await windowsService.setupCompanyWorkspace(company.slug);
+      
+      await prisma.auditLog.create({
+        data: {
+          action: 'COMPANY_PROVISION_FOLDER',
+          module: 'PROVISIONING',
+          status: 'SUCCESS',
+          message: `Created strictly isolated Windows Workspace: C:\\Companies\\${company.slug} with subfolders (Tally, Excel, Users, Datas).`,
+          operator: 'System Daemon'
+        }
+      });
+      
+      await prisma.auditLog.create({
+        data: {
+          action: 'COMPANY_PROVISION_GATEWAY',
+          module: 'PROVISIONING',
+          status: 'SUCCESS',
+          message: `Virtual workspace gateway mapped. Subdomain entry: ${company.slug}.chanakya.cloud ➔ Active`,
+          operator: 'System Daemon'
+        }
+      });
+      
+    } catch (winrmError: any) {
+      console.error('WinRM Company Provisioning Error:', winrmError);
+      
+      await prisma.company.update({
+        where: { id: company.id },
+        data: { provisionStatus: 'FAILED' }
+      });
+      
+      await prisma.auditLog.create({
+        data: {
+          action: 'COMPANY_PROVISION_FAILED',
+          module: 'PROVISIONING',
+          status: 'ERROR',
+          message: `Failed to construct NTFS folder hierarchy for company ${company.slug}.`,
+          operator: req.user?.email || 'System'
+        }
+      });
+      
+      res.status(500).json({ error: 'Windows folder provisioning failed. Company created in DB but server setup failed.' });
+      return;
+    }
 
     // Set company to PROVISIONED
     const provisionedCompany = await prisma.company.update({

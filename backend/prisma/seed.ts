@@ -4,7 +4,7 @@ import { encrypt } from '../src/utils/encryption';
 
 async function main() {
   console.log('Clearing database tables...');
-  
+
   // Clear tables in dependency order
   await prisma.auditLog.deleteMany({});
   await prisma.sessionLog.deleteMany({});
@@ -136,15 +136,16 @@ async function main() {
   });
 
   // 5. Create Users with WindowsUsername mapping
+  const superAdminPassword = await bcrypt.hash('Chanakya123', 10);
   const superAdminUser = await prisma.user.create({
     data: {
-      name: 'Chanakya Super Admin',
-      email: 'superadmin@chanakya.cloud',
+      name: 'Chanakya',
+      email: 'chanakya.it.tech@gmail.com',
       role: 'SUPER_ADMIN',
-      password: defaultAdminPassword,
+      password: superAdminPassword,
       status: 'ACTIVE',
-      windowsUsername: 'administrator',
-      windowsPassword: encrypt('admin123'),
+      windowsUsername: process.env.WINDOWS_USERNAME || 'Administrator',
+      windowsPassword: encrypt(process.env.WINDOWS_PASSWORD || 'RPGnQ&*zrxcICridR98yDeIR%tfMv7Z2'),
       provisionStatus: 'PROVISIONED'
     }
   });
