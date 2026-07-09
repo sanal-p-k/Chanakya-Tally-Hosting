@@ -26,8 +26,7 @@ const getAppIcon = (iconName: string) => {
 export default function Dashboard() {
   const router = useRouter();
   
-  // Theme & Views
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  // Views
   const [activeView, setActiveView] = useState<'home' | 'workspace' | 'admin' | 'settings'>('home');
   const [activeApp, setActiveApp] = useState<any>(null);
   
@@ -69,10 +68,7 @@ export default function Dashboard() {
     setUser(parsedUser);
     setToken(savedToken);
 
-    // Apply default theme
-    const root = window.document.documentElement;
-    root.classList.add('dark');
-    setTheme('dark');
+
 
     // Fetch workspace information
     fetchDashboardData(savedToken, parsedUser);
@@ -116,17 +112,7 @@ export default function Dashboard() {
     }
   };
 
-  // Toggle Theme
-  const toggleTheme = () => {
-    const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.remove('dark');
-      setTheme('light');
-    } else {
-      root.classList.add('dark');
-      setTheme('dark');
-    }
-  };
+
 
   // Sign out handler
   const handleSignOut = () => {
@@ -448,12 +434,7 @@ export default function Dashboard() {
               className="object-contain dark:brightness-100 brightness-110"
             />
           </div>
-          <button 
-            onClick={toggleTheme}
-            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-text-muted-light dark:text-text-muted-dark hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-900 transition"
-          >
-            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
+
         </div>
 
         {/* Sidebar Navigation */}
@@ -1015,33 +996,7 @@ export default function Dashboard() {
                 </div>
                 
                 <div className="space-y-4">
-                  <div>
-                    <h3 className="text-xs font-bold text-text-muted-light dark:text-text-muted-dark uppercase tracking-wider mb-2">Display Mode</h3>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => {
-                          const root = window.document.documentElement;
-                          root.classList.remove('dark');
-                          setTheme('light');
-                        }}
-                        className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border text-xs font-semibold transition ${theme === 'light' ? 'bg-slate-200 border-slate-300 dark:bg-slate-800 text-brand-blue' : 'border-card-border hover:bg-slate-100 dark:hover:bg-slate-900'}`}
-                      >
-                        <Sun className="w-4 h-4" />
-                        <span>Light Mode</span>
-                      </button>
-                      <button 
-                        onClick={() => {
-                          const root = window.document.documentElement;
-                          root.classList.add('dark');
-                          setTheme('dark');
-                        }}
-                        className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border text-xs font-semibold transition ${theme === 'dark' ? 'bg-slate-200 dark:bg-slate-900 border-slate-700 text-brand-blue' : 'border-card-border hover:bg-slate-100 dark:hover:bg-slate-900'}`}
-                      >
-                        <Moon className="w-4 h-4" />
-                        <span>Dark Mode (Recommended)</span>
-                      </button>
-                    </div>
-                  </div>
+
 
                   <div className="border-t border-slate-200 dark:border-slate-850 pt-4 space-y-2.5">
                     <h3 className="text-xs font-bold text-text-muted-light dark:text-text-muted-dark uppercase tracking-wider mb-1">RDP streaming profiles</h3>

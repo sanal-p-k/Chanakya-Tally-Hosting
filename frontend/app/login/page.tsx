@@ -68,12 +68,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-background-light dark:bg-background-dark p-4 md:p-8">
+    <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#f8fafc] p-4 md:p-8">
       {/* Dynamic Animated Mesh Gradient Background Blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-brand-blue/15 dark:bg-brand-blue/10 blur-[120px] animate-blob-slow" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-brand-orange/15 dark:bg-brand-orange/8 blur-[120px] animate-blob-slow-reverse" />
-        <div className="absolute top-[30%] right-[20%] w-[35%] h-[35%] rounded-full bg-brand-yellow/10 dark:bg-brand-yellow/5 blur-[100px] animate-pulse-slow" />
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-brand-blue/10 blur-[120px] animate-blob-slow" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-brand-orange/10 blur-[120px] animate-blob-slow-reverse" />
+        <div className="absolute top-[30%] right-[20%] w-[35%] h-[35%] rounded-full bg-brand-yellow/5 blur-[100px] animate-pulse-slow" />
       </div>
 
       <div className="relative w-full max-w-[460px] z-10">
@@ -90,14 +90,14 @@ export default function LoginPage() {
               alt="Chanakya Logo"
               fill
               priority
-              className="object-contain dark:brightness-100 brightness-110 drop-shadow-md"
+              className="object-contain brightness-110 drop-shadow-md"
             />
           </motion.div>
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.7 }}
             transition={{ delay: 0.3, duration: 0.6 }}
-            className="text-xs uppercase tracking-[0.2em] font-semibold mt-3 text-text-muted-light dark:text-text-muted-dark text-center"
+            className="text-xs uppercase tracking-[0.2em] font-semibold mt-3 text-slate-500 text-center"
           >
             Cloud Workspace Platform
           </motion.p>
@@ -111,10 +111,10 @@ export default function LoginPage() {
           className="glass-panel w-full rounded-2xl p-6 md:p-8"
         >
           <div className="mb-6">
-            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">
               Sign In
             </h2>
-            <p className="text-sm mt-1.5 text-text-muted-light dark:text-text-muted-dark">
+            <p className="text-sm mt-1.5 text-slate-500">
               Access your secure remote desktop applications.
             </p>
           </div>
@@ -123,7 +123,7 @@ export default function LoginPage() {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-5 flex items-center gap-2.5 p-3 rounded-lg bg-red-500/10 dark:bg-red-500/15 border border-red-500/20 text-red-600 dark:text-red-400 text-sm"
+              className="mb-5 flex items-center gap-2.5 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-650 text-sm"
             >
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
@@ -133,11 +133,11 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email Field */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground/80" htmlFor="email">
+              <label className="text-xs font-semibold text-slate-700" htmlFor="email">
                 Email Address
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-text-muted-light dark:text-text-muted-dark">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                   <Mail className="w-4.5 h-4.5" />
                 </span>
                 <input
@@ -146,7 +146,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@company.com"
-                  className="glass-input w-full pl-10 pr-4 py-2.5 rounded-lg text-sm text-foreground focus:ring-1"
+                  className="glass-input w-full pl-10 pr-4 py-2.5 rounded-lg text-sm text-slate-900 focus:ring-1"
                   required
                 />
               </div>
@@ -155,7 +155,7 @@ export default function LoginPage() {
             {/* Password Field */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-foreground/80" htmlFor="password">
+                <label className="text-xs font-semibold text-slate-700" htmlFor="password">
                   Password
                 </label>
                 <a
@@ -167,7 +167,7 @@ export default function LoginPage() {
                 </a>
               </div>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-text-muted-light dark:text-text-muted-dark">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                   <Lock className="w-4.5 h-4.5" />
                 </span>
                 <input
@@ -176,13 +176,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="glass-input w-full pl-10 pr-10 py-2.5 rounded-lg text-sm text-foreground focus:ring-1"
+                  className="glass-input w-full pl-10 pr-10 py-2.5 rounded-lg text-sm text-slate-900 focus:ring-1"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-muted-light dark:text-text-muted-dark hover:text-foreground transition"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-900 transition"
                 >
                   {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
                 </button>
@@ -196,11 +196,11 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-card-border bg-card-bg text-brand-blue focus:ring-brand-blue focus:ring-offset-background"
+                className="h-4 w-4 rounded border-slate-200 bg-white text-brand-blue focus:ring-brand-blue"
               />
               <label
                 htmlFor="remember-me"
-                className="ml-2 block text-xs font-medium text-text-muted-light dark:text-text-muted-dark select-none"
+                className="ml-2 block text-xs font-medium text-slate-500 select-none"
               >
                 Remember this device
               </label>
@@ -233,7 +233,7 @@ export default function LoginPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.5 }}
           transition={{ delay: 0.5 }}
-          className="text-center mt-6 text-xs text-text-muted-light dark:text-text-muted-dark"
+          className="text-center mt-6 text-xs text-slate-450"
         >
           &copy; {new Date().getFullYear()} Chanakya Cloud Workspace. All rights reserved.
         </motion.div>
