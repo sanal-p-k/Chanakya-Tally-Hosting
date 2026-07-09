@@ -27,7 +27,7 @@ export default function CompanyDetails() {
   const { data: company, isLoading, error } = useQuery({
     queryKey: ['company', id],
     queryFn: async () => {
-      const response = await fetch(`http://localhost:5000/api/companies/${id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/companies/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Failed to retrieve company details');

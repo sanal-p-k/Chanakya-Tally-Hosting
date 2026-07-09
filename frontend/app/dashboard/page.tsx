@@ -89,38 +89,38 @@ export default function Dashboard() {
       const headers = { 'Authorization': `Bearer ${authToken}` };
 
       // Get allowed apps
-      const appsRes = await fetch('http://localhost:5000/api/apps', { headers });
+      const appsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/apps`, { headers });
       const appsData = await appsRes.json();
       if (appsRes.ok) setAllowedApps(appsData);
 
       // Get recent sessions
-      const sessionsRes = await fetch('http://localhost:5000/api/sessions', { headers });
+      const sessionsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions`, { headers });
       const sessionsData = await sessionsRes.json();
       if (sessionsRes.ok) setRecentSessions(sessionsData);
 
       // Get Servers
-      const serversRes = await fetch('http://localhost:5000/api/servers', { headers });
+      const serversRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/servers`, { headers });
       const serversData = await serversRes.json();
       if (serversRes.ok) setServersList(serversData);
 
       // Get Audit Logs
-      const logsRes = await fetch('http://localhost:5000/api/audit-logs', { headers });
+      const logsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/audit-logs`, { headers });
       const logsData = await logsRes.json();
       if (logsRes.ok) setAuditLogsList(logsData);
 
       // Admin specific calls
       if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COMPANY_ADMIN') {
-        const usersRes = await fetch('http://localhost:5000/api/users', { headers });
+        const usersRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users`, { headers });
         const usersData = await usersRes.json();
         if (usersRes.ok) setUsersList(usersData);
 
-        const globalAppsRes = await fetch('http://localhost:5000/api/apps', { headers });
+        const globalAppsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/apps`, { headers });
         const globalAppsData = await globalAppsRes.json();
         if (globalAppsRes.ok) setGlobalApps(globalAppsData);
       }
 
       if (currentUser.role === 'SUPER_ADMIN') {
-        const companiesRes = await fetch('http://localhost:5000/api/companies', { headers });
+        const companiesRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/companies`, { headers });
         const companiesData = await companiesRes.json();
         if (companiesRes.ok) setCompanies(companiesData);
       }
@@ -133,7 +133,7 @@ export default function Dashboard() {
 
   const handleLaunchApp = async (app: any) => {
     try {
-      const response = await fetch('http://localhost:5000/api/sessions/launch', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/launch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,7 +148,7 @@ export default function Dashboard() {
       if (data.launchUrl) {
         window.open(data.launchUrl, '_blank');
         // Refresh sessions to show the active connection log
-        const sessionsRes = await fetch('http://localhost:5000/api/sessions', {
+        const sessionsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const sessionsData = await sessionsRes.json();
@@ -164,7 +164,7 @@ export default function Dashboard() {
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/companies', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/companies`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -189,7 +189,7 @@ export default function Dashboard() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/users', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -214,7 +214,7 @@ export default function Dashboard() {
   const handleCreateApp = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:5000/api/apps', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/apps`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -238,7 +238,7 @@ export default function Dashboard() {
   const handleAssignApplications = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${selectedItem.id}/assign-apps`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${selectedItem.id}/assign-apps`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -261,7 +261,7 @@ export default function Dashboard() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${selectedItem.id}/reset-password`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${selectedItem.id}/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -285,20 +285,20 @@ export default function Dashboard() {
   const handleRebootServer = async (serverId: string) => {
     if (!confirm('Are you sure you want to reboot this Windows Server RDP host? This will terminate all active connection logs.')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/servers/${serverId}/reboot`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/servers/${serverId}/reboot`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         alert('Server remote power cycle initiated.');
         // Refresh servers and log panel
-        const serversRes = await fetch('http://localhost:5000/api/servers', {
+        const serversRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/servers`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const serversData = await serversRes.json();
         if (serversRes.ok) setServersList(serversData);
 
-        const logsRes = await fetch('http://localhost:5000/api/audit-logs', {
+        const logsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/audit-logs`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const logsData = await logsRes.json();
@@ -311,7 +311,7 @@ export default function Dashboard() {
 
   const handlePingServer = async (serverId: string) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/servers/${serverId}/ping`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/servers/${serverId}/ping`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -326,12 +326,12 @@ export default function Dashboard() {
   const handleClearAuditLogs = async () => {
     if (!confirm('Are you sure you want to clear all provisioning history?')) return;
     try {
-      const res = await fetch('http://localhost:5000/api/audit-logs/clear', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/audit-logs/clear`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const logsRes = await fetch('http://localhost:5000/api/audit-logs', {
+        const logsRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/audit-logs`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const logsData = await logsRes.json();
@@ -345,7 +345,7 @@ export default function Dashboard() {
   const handleDeleteCompany = async (companyId: string) => {
     if (!confirm('Are you sure you want to delete this company? All associated users will be deleted.')) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/companies/${companyId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/companies/${companyId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -361,7 +361,7 @@ export default function Dashboard() {
   const handleDeleteUser = async (userId: string) => {
     if (!confirm('Are you sure you want to delete this user mapping?')) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${userId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -377,7 +377,7 @@ export default function Dashboard() {
   const handleToggleUserStatus = async (userItem: any) => {
     const newStatus = userItem.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${userItem.id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${userItem.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -396,7 +396,7 @@ export default function Dashboard() {
   const handleToggleCompanyStatus = async (companyItem: any) => {
     const newStatus = companyItem.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
     try {
-      const response = await fetch(`http://localhost:5000/api/companies/${companyItem.id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/companies/${companyItem.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1224,7 +1224,7 @@ export default function Dashboard() {
                                     onClick={async () => {
                                       if (!confirm('Are you sure you want to delete this application?')) return;
                                       try {
-                                        const response = await fetch(`http://localhost:5000/api/apps/${a.id}`, {
+                                        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/apps/${a.id}`, {
                                           method: 'DELETE',
                                           headers: { 'Authorization': `Bearer ${token}` }
                                         });

@@ -26,7 +26,7 @@ export default function UserDetails() {
   const { data: userDetails, isLoading, error } = useQuery({
     queryKey: ['user', id],
     queryFn: async () => {
-      const response = await fetch(`http://localhost:5000/api/users/${id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Failed to retrieve user details');
@@ -39,7 +39,7 @@ export default function UserDetails() {
   const { data: globalApps } = useQuery({
     queryKey: ['apps'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:5000/api/apps', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/apps`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       return await response.json();

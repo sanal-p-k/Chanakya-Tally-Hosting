@@ -33,7 +33,7 @@ export default function WorkspacePage() {
       try {
         // Step 1: Fetch application config details
         setLoadingMessage('Fetching application connection parameters...');
-        const appRes = await fetch(`http://localhost:5000/api/apps/${id}`, {
+        const appRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/apps/${id}`, {
           headers: { 'Authorization': `Bearer ${savedToken}` }
         });
         const appData = await appRes.json();
@@ -45,7 +45,7 @@ export default function WorkspacePage() {
 
         // Step 2: Establish Backend Session Log
         setLoadingMessage('Securing remote channel credentials...');
-        const launchRes = await fetch('http://localhost:5000/api/sessions/launch', {
+        const launchRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/launch`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -91,7 +91,7 @@ export default function WorkspacePage() {
     // Attempt graceful shutdown in backend
     if (sessionId && savedToken) {
       try {
-        await fetch('http://localhost:5000/api/sessions/end', {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/end`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
