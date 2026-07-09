@@ -1,0 +1,82 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Company {
+  id           String               @id @default(uuid())
+  name         String
+  status       String               @default("ACTIVE") // ACTIVE, SUSPENDED, INACTIVE
+  slug         String               @unique
+  storageLimit BigInt               @default(10737418240) // 10 GB in bytes (10 * 1024 * 1024 * 1024)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  users        User[]
+  applications CompanyApplication[]
+  sessions     SessionLog[]
+}
+
+model User {
+  id                  String            @id @default(uuid())
+  name                String
+  email               String            @unique
+  password            String
+  role                String            @default("USER") // SUPER_ADMIN, COMPANY_ADMIN, USER
+  status              String            @default("ACTIVE") // ACTIVE, DISABLED
+  companyId           String?
+  company             Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  allowedApplications UserApplication[]
+  sessions            SessionLog[]
+}
+
+model Application {
+  id                    String               @id @default(uuid())
+  name                  String
+  icon                  String               @default("AppWindow") // Lucide icon component name
+  description           String?
+  executable            String
+  guacamoleConnectionId String?              // Optional: standard Guacamole connection ID if connecting to a real server
+  guacamoleConfig       Json?                // Optional: JSON configurations like protocol, port, hostname, password
+  status                String               @default("ACTIVE") // ACTIVE, MAINTENANCE, INACTIVE
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  companies             CompanyApplication[]
+  users                 UserApplication[]
+}
+
+model CompanyApplication {
+  companyId     String
+  applicationId String
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, applicationId])
+}
+
+model UserApplication {
+  userId        String
+  applicationId String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, applicationId])
+}
+
+model SessionLog {
+  id              String    @id @default(uuid())
+  userId          String
+  companyId       String
+  applicationId   String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applicationName String
+  launchedAt      DateTime  @default(now())
+  endedAt         DateTime?
+  status          String    @default("ACTIVE") // ACTIVE, COMPLETED, FAILED
+}
