@@ -9,7 +9,10 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors({
-  origin: '*', // Allow all origins for simplicity in development and testing
+  origin: [
+    "http://13.203.203.175:3000",
+    "http://localhost:3000"
+  ],
   credentials: true
 }));
 
@@ -23,7 +26,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Chanakya Cloud Workspace Backend is online.' });
 });
 
-app.listen(port, () => {
+app.listen(port as number, '0.0.0.0', () => {
   console.log(`=================================================`);
   console.log(`🚀 Chanakya Cloud Workspace Backend Running`);
   console.log(`🔊 Listening on port: http://localhost:${port}`);
