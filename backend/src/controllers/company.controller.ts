@@ -3,7 +3,7 @@ import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 export const createCompany = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { name, slug, storageLimit } = req.body;
+  const { name, slug } = req.body;
 
   if (!name || !slug) {
     res.status(400).json({ error: 'Company name and slug are required.' });
@@ -17,14 +17,10 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    // Default storage: 10 GB in bytes
-    const limit = storageLimit ? BigInt(storageLimit) : 10737418240n;
-
     const company = await prisma.company.create({
       data: {
         name,
-        slug: slug.toLowerCase().replace(/\s+/g, '-'),
-        storageLimit: limit
+        slug: slug.toLowerCase().replace(/\s+/g, '-')
       }
     });
 
@@ -39,10 +35,7 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
       });
     }
 
-    res.status(201).json({
-      ...company,
-      storageLimit: company.storageLimit.toString()
-    });
+    res.status(201).json(company);
   } catch (error) {
     console.error('Create company error:', error);
     res.status(500).json({ error: 'Internal server error.' });
@@ -62,7 +55,6 @@ export const getCompanies = async (req: AuthenticatedRequest, res: Response): Pr
 
     const serialized = companies.map((c) => ({
       ...c,
-      storageLimit: c.storageLimit.toString(),
       userCount: c._count.users
     }));
 
@@ -104,7 +96,6 @@ export const getCompanyById = async (req: AuthenticatedRequest, res: Response): 
 
     res.json({
       ...company,
-      storageLimit: company.storageLimit.toString(),
       applications: company.applications.map(appLink => appLink.application)
     });
   } catch (error) {
@@ -115,23 +106,19 @@ export const getCompanyById = async (req: AuthenticatedRequest, res: Response): 
 
 export const updateCompany = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { name, status, storageLimit } = req.body;
+  const { name, status } = req.body;
 
   try {
     const data: any = {};
     if (name) data.name = name;
     if (status) data.status = status;
-    if (storageLimit !== undefined) data.storageLimit = BigInt(storageLimit);
 
     const company = await prisma.company.update({
       where: { id },
       data
     });
 
-    res.json({
-      ...company,
-      storageLimit: company.storageLimit.toString()
-    });
+    res.json(company);
   } catch (error) {
     console.error('Update company error:', error);
     res.status(500).json({ error: 'Internal server error.' });

@@ -47,7 +47,7 @@ export default function Dashboard() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
 
   // Forms inputs
-  const [companyForm, setCompanyForm] = useState({ name: '', slug: '', storageLimit: '10737418240' });
+  const [companyForm, setCompanyForm] = useState({ name: '', slug: '' });
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', role: 'USER', companyId: '', allowedApplications: [] as string[] });
   const [appForm, setAppForm] = useState({ name: '', icon: 'AppWindow', description: '', executable: '', guacamoleConnectionId: '', guacamoleConfig: '{}', status: 'ACTIVE' });
   const [passwordResetForm, setPasswordResetForm] = useState({ newPassword: '' });
@@ -135,9 +135,12 @@ export default function Dashboard() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to start session');
       
-      setActiveSessionId(data.sessionId);
-      setActiveApp(app);
-      setActiveView('workspace');
+      // Open direct Guacamole connection client URL in a new window/tab
+      if (data.launchUrl) {
+        window.open(data.launchUrl, '_blank');
+      } else {
+        throw new Error('Launch URL not returned by server.');
+      }
     } catch (error: any) {
       alert(error.message || 'Server error launching application.');
     }
@@ -190,7 +193,7 @@ export default function Dashboard() {
       });
       if (response.ok) {
         setModalType(null);
-        setCompanyForm({ name: '', slug: '', storageLimit: '10737418240' });
+        setCompanyForm({ name: '', slug: '' });
         // Refresh company records
         const companiesRes = await fetch('http://localhost:5000/api/companies', {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -483,7 +486,7 @@ export default function Dashboard() {
                 {allowedApps.map((app) => (
                   <button
                     key={app.id}
-                    onClick={() => router.push('/workspace/' + app.id)}
+                    onClick={() => handleLaunchApp(app)}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition text-left group ${activeApp?.id === app.id ? 'bg-slate-200 dark:bg-slate-900 text-brand-blue font-bold' : 'text-text-muted-light dark:text-text-muted-dark hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-foreground'}`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -572,7 +575,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* SaaS Metrics Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   
                   {/* Metric 1 */}
                   <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
@@ -604,17 +607,6 @@ export default function Dashboard() {
                     <div>
                       <div className="text-[10px] text-text-muted-light dark:text-text-muted-dark uppercase font-bold tracking-wider">Active Users</div>
                       <div className="text-xl font-bold mt-0.5 text-foreground">1 Session</div>
-                    </div>
-                  </div>
-
-                  {/* Metric 4 (Storage Progress Bar) */}
-                  <div className="glass-panel p-4 rounded-xl flex flex-col justify-center">
-                    <div className="flex justify-between items-center mb-1.5 text-[10px] font-bold text-text-muted-light dark:text-text-muted-dark uppercase tracking-wider">
-                      <span>Cloud Storage Used</span>
-                      <span className="text-foreground">4.2 GB of 10 GB</span>
-                    </div>
-                    <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-300 dark:border-slate-700">
-                      <div className="bg-brand-blue h-2 rounded-full w-[42%] transition-all duration-500" />
                     </div>
                   </div>
 
@@ -665,7 +657,7 @@ export default function Dashboard() {
                           </div>
                           
                           <button
-                            onClick={() => router.push('/workspace/' + app.id)}
+                            onClick={() => handleLaunchApp(app)}
                             className="mt-5 w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold transition shadow-sm hover:shadow shadow-brand-blue/10 cursor-pointer"
                           >
                             <Play className="w-3.5 h-3.5" />
@@ -804,7 +796,6 @@ export default function Dashboard() {
                               <th className="p-3">Company</th>
                               <th className="p-3">Slug / Endpoint</th>
                               <th className="p-3">User Count</th>
-                              <th className="p-3">Storage Limit</th>
                               <th className="p-3">Status</th>
                               <th className="p-3 text-right">Actions</th>
                             </tr>
@@ -815,7 +806,6 @@ export default function Dashboard() {
                                 <td className="p-3 font-semibold text-foreground">{c.name}</td>
                                 <td className="p-3 font-mono">{c.slug}.chanakya.cloud</td>
                                 <td className="p-3 font-bold text-brand-blue">{c.userCount || 0} Accounts</td>
-                                <td className="p-3">{(Number(c.storageLimit) / (1024*1024*1024)).toFixed(0)} GB</td>
                                 <td className="p-3">
                                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
                                     {c.status}
@@ -1089,19 +1079,7 @@ export default function Dashboard() {
                       className="glass-input w-full p-2.5 rounded-lg text-xs font-mono text-foreground focus:ring-1" 
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">Storage Provision Limit (Bytes)</label>
-                    <select 
-                      value={companyForm.storageLimit}
-                      onChange={(e) => setCompanyForm({ ...companyForm, storageLimit: e.target.value })}
-                      className="glass-input w-full p-2.5 rounded-lg text-xs text-foreground focus:ring-1"
-                    >
-                      <option value="5368709120">5 GB (Standard)</option>
-                      <option value="10737418240">10 GB (Premium)</option>
-                      <option value="21474836480">20 GB (Enterprise)</option>
-                      <option value="53687091200">50 GB (Scale)</option>
-                    </select>
-                  </div>
+
                   
                   <div className="flex justify-end gap-2 pt-2">
                     <button 

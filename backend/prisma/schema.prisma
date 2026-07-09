@@ -12,7 +12,6 @@ model Company {
   name         String
   status       String               @default("ACTIVE") // ACTIVE, SUSPENDED, INACTIVE
   slug         String               @unique
-  storageLimit BigInt               @default(10737418240) // 10 GB in bytes (10 * 1024 * 1024 * 1024)
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   users        User[]

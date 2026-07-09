@@ -89,11 +89,15 @@ export const launchApp = async (req: AuthenticatedRequest, res: Response): Promi
     };
     await client.set(`session:${session.id}`, JSON.stringify(sessionPayload));
 
-    // 4. Return Guacamole Iframe Connection Details
-    // Generates a mock or real URL based on configuration
-    // Normal Guacamole URL format: http://<guacamole_host>:<port>/guacamole/#/client/c/<conn_id>?token=...
-    // In our case, if no live connection details are set, the frontend will detect the connection parameters
-    // and boot up our Interactive Windows Simulator.
+    // 4. Return Direct Guacamole Connection client URL
+    // Connection key: connectionId + "\0" + type + "\0" + authProvider
+    // Decoded example '1\0c\0postgresql' encoded in UTF-16LE base64 matches standard DB auth endpoints.
+    const guacUrl = (process.env.GUACAMOLE_URL || 'http://13.232.28.88:8080').replace(/\/$/, '');
+    const connId = app.guacamoleConnectionId || '1';
+    const key = connId + '\0c\0postgresql';
+    const encoded = Buffer.from(key, 'utf16le').toString('base64');
+    const launchUrl = `${guacUrl}/#/client/${encoded}`;
+
     res.json({
       sessionId: session.id,
       application: {
@@ -102,10 +106,7 @@ export const launchApp = async (req: AuthenticatedRequest, res: Response): Promi
         icon: app.icon,
         description: app.description
       },
-      connectionUrl: app.guacamoleConnectionId
-        ? `/guacamole/#/client/c/${app.guacamoleConnectionId}`
-        : null,
-      guacamoleConfig: app.guacamoleConfig
+      launchUrl
     });
   } catch (error) {
     console.error('Launch app error:', error);

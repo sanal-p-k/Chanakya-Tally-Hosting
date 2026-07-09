@@ -97,8 +97,7 @@ async function main() {
     data: {
       name: 'Chanakya Group',
       slug: 'chanakya',
-      status: 'ACTIVE',
-      storageLimit: 10737418240n // 10 GB
+      status: 'ACTIVE'
     }
   });
 
