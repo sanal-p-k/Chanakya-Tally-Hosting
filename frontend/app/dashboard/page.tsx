@@ -56,6 +56,7 @@ export default function Dashboard() {
   // Modal control states
   const [modalType, setModalType] = useState<'create-company' | 'create-user' | 'create-app' | 'assign-apps' | 'reset-password' | null>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Forms inputs
   const [companyForm, setCompanyForm] = useState({ name: '', slug: '', windowsServerId: '' });
@@ -163,6 +164,7 @@ export default function Dashboard() {
 
   const handleCreateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/companies`, {
         method: 'POST',
@@ -183,11 +185,14 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users`, {
         method: 'POST',
@@ -208,6 +213,8 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1442,9 +1449,10 @@ export default function Dashboard() {
                     </button>
                     <button 
                       type="submit"
-                      className="px-4 py-2 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                      disabled={isSubmitting}
+                      className={`px-4 py-2 bg-brand-blue text-white text-xs font-bold rounded-lg transition ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-blue-hover cursor-pointer'}`}
                     >
-                      Add Workspace
+                      {isSubmitting ? 'Provisioning...' : 'Add Workspace'}
                     </button>
                   </div>
                 </form>
@@ -1527,9 +1535,10 @@ export default function Dashboard() {
                     </button>
                     <button 
                       type="submit"
-                      className="px-4 py-2 bg-brand-blue hover:bg-brand-blue-hover text-white text-xs font-bold rounded-lg transition cursor-pointer"
+                      disabled={isSubmitting}
+                      className={`px-4 py-2 bg-brand-blue text-white text-xs font-bold rounded-lg transition ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-blue-hover cursor-pointer'}`}
                     >
-                      Provision user
+                      {isSubmitting ? 'Provisioning...' : 'Provision user'}
                     </button>
                   </div>
                 </form>

@@ -92,7 +92,9 @@ export class WinRMClient {
 
     // Remote AWS VPC WinRM Execution
     try {
-      const stdout = await runPowershell(
+      const timeoutMs = 15000; // 15 seconds timeout
+      
+      const winrmPromise = runPowershell(
         commandStr,
         this.host,
         this.username,
@@ -102,6 +104,11 @@ export class WinRMClient {
         false  // rejectUnauthorized
       );
 
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Connection timeout after ${timeoutMs}ms. Host is unreachable.`)), timeoutMs);
+      });
+
+      const stdout = await Promise.race([winrmPromise, timeoutPromise]) as string;
       const executionTimeMs = Date.now() - startTime;
       console.log(`[WinRM] Execution finished in ${executionTimeMs}ms. Success: true.`);
 

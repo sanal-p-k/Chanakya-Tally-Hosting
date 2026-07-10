@@ -2,6 +2,8 @@ import { Response } from 'express';
 import prisma from '../utils/prisma';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { windowsService } from '../modules/windows/windows.controller';
+import { encrypt } from '../utils/encryption';
+import crypto from 'crypto';
 
 export const createCompany = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const { name, slug, windowsServerId } = req.body;
@@ -26,11 +28,18 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
       targetServerId = defaultServer?.id || null;
     }
 
+    const rawSlug = slug.toLowerCase().replace(/\s+/g, '-');
+    const companyWinUser = `c_${rawSlug}`.substring(0, 20); // Windows 20 char limit
+    const rawWinPassword = crypto.randomBytes(8).toString('hex') + 'A1!'; // Secure random password
+    const encryptedWinPassword = encrypt(rawWinPassword);
+
     const company = await prisma.company.create({
       data: {
         name,
-        slug: slug.toLowerCase().replace(/\s+/g, '-'),
+        slug: rawSlug,
         windowsServerId: targetServerId,
+        windowsUsername: companyWinUser,
+        windowsPassword: encryptedWinPassword,
         provisionStatus: 'PENDING'
       }
     });
@@ -41,7 +50,7 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
         action: 'COMPANY_PROVISION_START',
         module: 'PROVISIONING',
         status: 'INFO',
-        message: `Beginning automated folder allocation for company [${name}] on target Server.`,
+        message: `Beginning automated folder & identity allocation for company [${name}] on target Server.`,
         operator: req.user?.email || 'System'
       }
     });
@@ -57,14 +66,29 @@ export const createCompany = async (req: AuthenticatedRequest, res: Response): P
       });
     }
 
-    // Real WinRM Folder Provisioning
+    // Real WinRM Provisioning (User & Folder)
     try {
       const connected = await windowsService.connect();
       if (!connected) {
         throw new Error('Could not establish WinRM connection to the Windows Server.');
       }
       
-      await windowsService.setupCompanyWorkspace(company.slug);
+      // 1. Create the single Windows local user for this company
+      await windowsService.createLocalUser(companyWinUser, rawWinPassword);
+      await windowsService.addRemoteDesktopPermission(companyWinUser);
+      
+      await prisma.auditLog.create({
+        data: {
+          action: 'COMPANY_PROVISION_AD',
+          module: 'PROVISIONING',
+          status: 'SUCCESS',
+          message: `Created single Windows Execution Profile: ${companyWinUser} on RDP node.`,
+          operator: 'System Daemon'
+        }
+      });
+      
+      // 2. Setup strict workspace with that user having exclusive access
+      await windowsService.setupCompanyWorkspace(company.slug, companyWinUser);
       
       await prisma.auditLog.create({
         data: {

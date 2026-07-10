@@ -109,8 +109,9 @@ export class WindowsService {
   /**
    * Setup automated Company Folder Hierarchy with strict isolation
    */
-  public async setupCompanyWorkspace(companySlug: string): Promise<WinRMResult> {
+  public async setupCompanyWorkspace(companySlug: string, companyUsername: string): Promise<WinRMResult> {
     const slug = this.sanitizeInput(companySlug);
+    const winUser = this.sanitizeInput(companyUsername);
     const rootPath = `C:\\Companies\\${slug}`;
     
     const script = `
@@ -124,8 +125,11 @@ export class WindowsService {
 
       $systemRule = New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM","FullControl","ContainerInherit,ObjectInherit","None","Allow")
       $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule("Administrators","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+      $companyRule = New-Object System.Security.AccessControl.FileSystemAccessRule("${winUser}","Modify","ContainerInherit,ObjectInherit","None","Allow")
+      
       $acl.AddAccessRule($systemRule)
       $acl.AddAccessRule($adminRule)
+      $acl.AddAccessRule($companyRule)
 
       Set-Acl -Path $rootPath -AclObject $acl
 

@@ -29,7 +29,6 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
         role: true,
         status: true,
         companyId: true,
-        windowsUsername: true,
         provisionStatus: true,
         company: {
           select: {
@@ -47,9 +46,9 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
       orderBy: { createdAt: 'desc' }
     });
 
-    const formatted = users.map((u) => ({
+    const formatted = users.map((u: any) => ({
       ...u,
-      allowedApplications: u.allowedApplications.map((ua) => ua.applicationId)
+      allowedApplications: u.allowedApplications ? u.allowedApplications.map((ua: any) => ua.applicationId) : []
     }));
 
     res.json(formatted);
@@ -97,17 +96,15 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
     const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     const windowsUsername = cleanName + (company ? `.${company.slug}` : '.admin');
 
-    // Create DB User in PENDING state
+    // Create DB User in PROVISIONED state (instant provisioning)
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        windowsPassword: encryptedWindowsPassword,
         role: targetRole,
         companyId: targetCompanyId || null,
-        windowsUsername,
-        provisionStatus: 'PENDING'
+        provisionStatus: 'PROVISIONED'
       }
     });
 
@@ -126,99 +123,26 @@ export const createUser = async (req: AuthenticatedRequest, res: Response): Prom
     // Start provisioning log
     await prisma.auditLog.create({
       data: {
-        action: 'USER_PROVISION_START',
+        action: 'USER_PROVISION_SUCCESS',
         module: 'PROVISIONING',
         status: 'INFO',
-        message: `Spawning automatic Windows RDP provisioning for user [${name}] in company [${companyName}].`,
+        message: `Instantly provisioned SaaS user [${name}] in company [${companyName}].`,
         operator: req.user?.email || 'System'
       }
     });
 
-    // Execute Real Windows Provisioning over WinRM
-    try {
-      const connected = await windowsService.connect();
-      if (!connected) {
-        throw new Error('Could not establish WinRM connection to the Windows Server.');
-      }
-
-      await windowsService.createLocalUser(windowsUsername, password);
-      
-      await prisma.auditLog.create({
-        data: {
-          action: 'USER_PROVISION_AD',
-          module: 'PROVISIONING',
-          status: 'SUCCESS',
-          message: `Created Active Directory Windows account: ${windowsUsername} on RDP node.`,
-          operator: 'System Daemon'
-        }
-      });
-
-      await windowsService.addRemoteDesktopPermission(windowsUsername);
-      
-      await prisma.auditLog.create({
-        data: {
-          action: 'USER_PROVISION_GROUPS',
-          module: 'PROVISIONING',
-          status: 'SUCCESS',
-          message: `Added user ${windowsUsername} to [Remote Desktop Users] security privileges group.`,
-          operator: 'System Daemon'
-        }
-      });
-
-      if (company) {
-        await windowsService.grantFolderPermission(windowsUsername, `C:\\Companies\\${company.slug}`);
-        
-        await prisma.auditLog.create({
-          data: {
-            action: 'USER_PROVISION_FOLDER',
-            module: 'PROVISIONING',
-            status: 'SUCCESS',
-            message: `Mapped NTFS modify privileges on C:\\Companies\\${company.slug} for ${windowsUsername}.`,
-            operator: 'System Daemon'
-          }
-        });
-      }
-    } catch (winrmError) {
-      console.error('WinRM Provisioning Error:', winrmError);
-      
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { provisionStatus: 'FAILED' }
-      });
-      
-      await prisma.auditLog.create({
-        data: {
-          action: 'USER_PROVISION_FAILED',
-          module: 'PROVISIONING',
-          status: 'ERROR',
-          message: `Failed to provision user ${windowsUsername} on Windows Server.`,
-          operator: req.user?.email || 'System'
-        }
-      });
-      
-      res.status(500).json({ error: 'Windows provisioning failed. User created in DB but failed on Server.' });
-      return;
-    }
-
-    // Update status to PROVISIONED
-    const finalUser = await prisma.user.update({
-      where: { id: user.id },
-      data: { provisionStatus: 'PROVISIONED' }
-    });
-
     res.status(201).json({
       success: true,
-      windows: true,
+      windows: false,
       database: true,
       user: {
-        id: finalUser.id,
-        name: finalUser.name,
-        email: finalUser.email,
-        role: finalUser.role,
-        status: finalUser.status,
-        companyId: finalUser.companyId,
-        windowsUsername: finalUser.windowsUsername,
-        provisionStatus: finalUser.provisionStatus
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        companyId: user.companyId,
+        provisionStatus: user.provisionStatus
       }
     });
   } catch (error: any) {
@@ -279,23 +203,9 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
         role: true,
         status: true,
         companyId: true,
-        windowsUsername: true,
         provisionStatus: true
       }
     });
-
-    // Log state changes
-    if (status && status !== existingUser.status && updated.windowsUsername) {
-      await prisma.auditLog.create({
-        data: {
-          action: status === 'ACTIVE' ? 'USER_ENABLE' : 'USER_DISABLE',
-          module: 'PROVISIONING',
-          status: 'SUCCESS',
-          message: `${status === 'ACTIVE' ? 'Enabled' : 'Disabled'} Windows Account ${updated.windowsUsername} via Admin command.`,
-          operator: req.user.email
-        }
-      });
-    }
 
     res.json(updated);
   } catch (error) {
@@ -322,18 +232,6 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response): Prom
     if (req.user.role === 'COMPANY_ADMIN' && existingUser.companyId !== req.user.companyId) {
       res.status(403).json({ error: 'You are not authorized to delete this user.' });
       return;
-    }
-
-    if (existingUser.windowsUsername) {
-      await prisma.auditLog.create({
-        data: {
-          action: 'USER_DELETE_REMOTE',
-          module: 'PROVISIONING',
-          status: 'SUCCESS',
-          message: `Removed Windows AD User Account: ${existingUser.windowsUsername} from host.`,
-          operator: req.user.email
-        }
-      });
     }
 
     await prisma.user.delete({ where: { id } });
@@ -371,25 +269,11 @@ export const resetPassword = async (req: AuthenticatedRequest, res: Response): P
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const encryptedWindowsPassword = encrypt(password);
-
-    if (existingUser.windowsUsername) {
-      await prisma.auditLog.create({
-        data: {
-          action: 'USER_PASSWORD_SYNC',
-          module: 'PROVISIONING',
-          status: 'SUCCESS',
-          message: `Synchronized security credentials for user ${existingUser.windowsUsername} on Windows host.`,
-          operator: req.user.email
-        }
-      });
-    }
 
     await prisma.user.update({
       where: { id },
       data: { 
-        password: hashedPassword,
-        windowsPassword: encryptedWindowsPassword
+        password: hashedPassword
       }
     });
 

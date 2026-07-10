@@ -30,6 +30,8 @@ model Company {
   slug            String               @unique
   windowsServerId String?
   windowsServer   WindowsServer?       @relation(fields: [windowsServerId], references: [id], onDelete: SetNull)
+  windowsUsername String?              @unique
+  windowsPassword String?              // Encrypted AES Windows password
   provisionStatus String               @default("PROVISIONED") // PENDING, PROVISIONED, FAILED
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
@@ -43,8 +45,6 @@ model User {
   name                String
   email               String            @unique
   password            String
-  windowsUsername     String?
-  windowsPassword     String?           // Encrypted AES Windows password
   provisionStatus     String            @default("PROVISIONED") // PENDING, PROVISIONED, FAILED
   role                String            @default("USER") // SUPER_ADMIN, COMPANY_ADMIN, USER
   status              String            @default("ACTIVE") // ACTIVE, DISABLED
